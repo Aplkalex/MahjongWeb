@@ -18,6 +18,9 @@ export {
     CANTONESE_RULESET,
     CANTONESE_FAN_TYPES,
     DEFAULT_SCORING_CONFIG,
+    CONFIG_25_CHICKEN,
+    CONFIG_51,
+    CONFIG_12,
     calculateCantoneseScore,
     calculateScoreProMode,
     calculateScoreNormalMode,
@@ -30,7 +33,7 @@ export {
     validateFanCombination,
 } from './cantonese';
 
-export type { ScoringConfig } from './cantonese';
+export type { ScoringConfig, PaymentMode, EscalationMode } from './cantonese';
 
 // 導入所有牌制
 import { CANTONESE_RULESET } from './cantonese';

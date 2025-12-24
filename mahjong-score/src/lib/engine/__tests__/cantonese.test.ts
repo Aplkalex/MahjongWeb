@@ -284,7 +284,7 @@ describe('Pro Mode 計分', () => {
         expect(result.fanDescription).toBe('對對糊');
     });
 
-    it('直接輸入 5 番 - 出銃', () => {
+    it('直接輸入 5 番 - 出銃（全銃制）', () => {
         const players = createTestPlayers();
         const result = calculateScoreProMode(
             'discard',
@@ -300,8 +300,9 @@ describe('Pro Mode 計分', () => {
         expect(result.totalFan).toBe(5);
         expect(result.basePoints).toBe(32);
 
+        // 全銃制：莊家出銃要包晒 = 莊家畀雙倍 + 其他兩家畀單倍 = 64 + 32 + 32 = 128
         const loserChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(loserChange?.delta).toBe(-64);
+        expect(loserChange?.delta).toBe(-128);
     });
 
     it('Pro Mode 番數不足應該報錯', () => {
@@ -459,7 +460,7 @@ describe('分數計算', () => {
         expect(winnerChange?.delta).toBe(32); // 16 + 8 + 8
     });
 
-    it('出銃 - 只有出銃者畀錢', () => {
+    it('出銃（全銃制）- 出銃者包晒', () => {
         const players = createTestPlayers();
         const result = calculateScoreProMode(
             'discard',
@@ -470,21 +471,23 @@ describe('分數計算', () => {
             players[0].id
         );
 
-        // 閒家出銃畀閒家 = 單倍 8
+        // 全銃制：閒家贏閒家出銃
+        // 贏家收：莊家畀雙倍(16) + 出銃者單倍(8) + 另一閒家單倍(8) = 32
+        // 出銃者包晒
         const winnerChange = result.changes.find((c) => c.playerId === players[1].id);
-        expect(winnerChange?.delta).toBe(8);
+        expect(winnerChange?.delta).toBe(32);
 
         const loserChange = result.changes.find((c) => c.playerId === players[2].id);
-        expect(loserChange?.delta).toBe(-8);
+        expect(loserChange?.delta).toBe(-32);
 
-        // 其他人無影響
+        // 其他人無影響（全銃制）
         const otherChange1 = result.changes.find((c) => c.playerId === players[0].id);
         const otherChange2 = result.changes.find((c) => c.playerId === players[3].id);
         expect(otherChange1?.delta).toBe(0);
         expect(otherChange2?.delta).toBe(0);
     });
 
-    it('出銃莊家贏 - 出銃者畀雙倍', () => {
+    it('出銃莊家贏（全銃制）- 出銃者包晒', () => {
         const players = createTestPlayers();
         const result = calculateScoreProMode(
             'discard',
@@ -495,12 +498,13 @@ describe('分數計算', () => {
             players[0].id
         );
 
-        // 莊家贏 = 雙倍 16
+        // 全銃制：莊家贏閒家出銃
+        // 贏家收：莊家贏三家都畀雙倍 = 16 + 16 + 16 = 48
         const winnerChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(winnerChange?.delta).toBe(16);
+        expect(winnerChange?.delta).toBe(48);
 
         const loserChange = result.changes.find((c) => c.playerId === players[1].id);
-        expect(loserChange?.delta).toBe(-16);
+        expect(loserChange?.delta).toBe(-48);
     });
 });
 
@@ -768,5 +772,159 @@ describe('自訂 Config', () => {
 
         // baseScore = 2, 3番 = 2 * 2^3 = 16
         expect(result.basePoints).toBe(16);
+    });
+});
+
+// ============================================
+// 半銃制 vs 全銃制 Tests
+// ============================================
+
+describe('半銃制 vs 全銃制', () => {
+    it('半銃制：出銃者畀雙倍，其他兩家畀單倍', () => {
+        const config: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            paymentMode: 'half',
+        };
+
+        const players = createTestPlayers();
+        const result = calculateScoreProMode(
+            'discard',
+            players[1].id,
+            players[2].id,
+            3,
+            players,
+            players[0].id,
+            undefined,
+            config
+        );
+
+        // 半銃制：
+        // 莊家畀雙倍 = 16
+        // 出銃者畀雙倍（單倍x2）= 16
+        // 其他閒家畀單倍 = 8
+        // 總共 = 40
+        const winnerChange = result.changes.find((c) => c.playerId === players[1].id);
+        expect(winnerChange?.delta).toBe(40);
+
+        const loserChange = result.changes.find((c) => c.playerId === players[2].id);
+        expect(loserChange?.delta).toBe(-16);
+
+        const dealerChange = result.changes.find((c) => c.playerId === players[0].id);
+        expect(dealerChange?.delta).toBe(-16);
+
+        const otherChange = result.changes.find((c) => c.playerId === players[3].id);
+        expect(otherChange?.delta).toBe(-8);
+    });
+
+    it('全銃制：出銃者包晒', () => {
+        const config: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            paymentMode: 'full',
+        };
+
+        const players = createTestPlayers();
+        const result = calculateScoreProMode(
+            'discard',
+            players[1].id,
+            players[2].id,
+            3,
+            players,
+            players[0].id,
+            undefined,
+            config
+        );
+
+        // 全銃制：
+        // 贏家收：莊家雙倍(16) + 出銃者單倍(8) + 另一閒家(8) = 32
+        // 出銃者包晒
+        const winnerChange = result.changes.find((c) => c.playerId === players[1].id);
+        expect(winnerChange?.delta).toBe(32);
+
+        const loserChange = result.changes.find((c) => c.playerId === players[2].id);
+        expect(loserChange?.delta).toBe(-32);
+
+        // 其他人無影響
+        expect(result.changes.find((c) => c.playerId === players[0].id)?.delta).toBe(0);
+        expect(result.changes.find((c) => c.playerId === players[3].id)?.delta).toBe(0);
+    });
+});
+
+// ============================================
+// 辣辣上 vs 半辣上 Tests
+// ============================================
+
+describe('辣辣上 vs 半辣上', () => {
+    it('辣辣上：每番加倍', () => {
+        const config: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            escalationMode: 'double',
+            minFan: 0,
+        };
+
+        const players = createTestPlayers();
+
+        // 測試各個番數
+        const testCases = [
+            { fan: 0, expected: 1 },
+            { fan: 1, expected: 2 },
+            { fan: 2, expected: 4 },
+            { fan: 3, expected: 8 },
+            { fan: 4, expected: 16 },
+            { fan: 5, expected: 32 },
+            { fan: 6, expected: 64 },
+        ];
+
+        for (const tc of testCases) {
+            const result = calculateScoreProMode(
+                'self-draw',
+                players[0].id,
+                undefined,
+                tc.fan,
+                players,
+                players[1].id,
+                undefined,
+                config
+            );
+            expect(result.basePoints).toBe(tc.expected);
+        }
+    });
+
+    it('半辣上：四番後交替 x1.5 同 x2', () => {
+        const config: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            escalationMode: 'halfDouble',
+            minFan: 0,
+        };
+
+        const players = createTestPlayers();
+
+        // 測試各個番數
+        const testCases = [
+            { fan: 0, expected: 1 },
+            { fan: 1, expected: 2 },
+            { fan: 2, expected: 4 },
+            { fan: 3, expected: 8 },
+            { fan: 4, expected: 16 },
+            { fan: 5, expected: 24 },   // 4番 x 1.5
+            { fan: 6, expected: 32 },   // 4番 x 2
+            { fan: 7, expected: 48 },   // 6番 x 1.5
+            { fan: 8, expected: 64 },   // 6番 x 2
+            { fan: 9, expected: 96 },   // 8番 x 1.5
+            { fan: 10, expected: 128 }, // 8番 x 2
+        ];
+
+        for (const tc of testCases) {
+            const result = calculateScoreProMode(
+                'self-draw',
+                players[0].id,
+                undefined,
+                tc.fan,
+                players,
+                players[1].id,
+                undefined,
+                config
+            );
+            expect(result.basePoints).toBe(tc.expected);
+        }
     });
 });

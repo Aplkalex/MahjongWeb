@@ -513,8 +513,22 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
 // 計分配置
 // ============================================
 
+/**
+ * 付款模式
+ * - half: 半銃制 - 出銃者畀雙倍，其他兩家畀單倍
+ * - full: 全銃制 - 出銃者包晒（畀相當於三家嘅錢）
+ */
+export type PaymentMode = 'half' | 'full';
+
+/**
+ * 番數遞增模式
+ * - double: 辣辣上 - 每番加倍
+ * - halfDouble: 半辣上 - 四番後交替 x1.5 同 x2
+ */
+export type EscalationMode = 'double' | 'halfDouble';
+
 export interface ScoringConfig {
-    /** 每底幾分 */
+    /** 每底幾分（二五雞=0.25, 五一=0.5, 一二蚊=1） */
     baseScore: number;
     /** 最少幾番先食得糊 */
     minFan: number;
@@ -522,10 +536,12 @@ export interface ScoringConfig {
     maxFan: number;
     /** 起始分數 */
     startingScore: number;
-    /** 規則變體 */
+    /** 規則變體（清章/新章） */
     variant: RuleVariant;
-    /** 計分模式：全銃 / 陪銃 */
-    scoringMode: 'full' | 'half';
+    /** 付款模式（半銃/全銃） */
+    paymentMode: PaymentMode;
+    /** 番數遞增模式（辣辣上/半辣上） */
+    escalationMode: EscalationMode;
 }
 
 export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
@@ -534,7 +550,47 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
     maxFan: 13,
     startingScore: 500,
     variant: 'standard',
-    scoringMode: 'full',
+    paymentMode: 'full',
+    escalationMode: 'double',
+};
+
+/**
+ * 預設配置：二五雞
+ */
+export const CONFIG_25_CHICKEN: ScoringConfig = {
+    baseScore: 0.25,
+    minFan: 0,
+    maxFan: 10,
+    startingScore: 100,
+    variant: 'standard',
+    paymentMode: 'full',
+    escalationMode: 'double',
+};
+
+/**
+ * 預設配置：五一
+ */
+export const CONFIG_51: ScoringConfig = {
+    baseScore: 0.5,
+    minFan: 0,
+    maxFan: 10,
+    startingScore: 200,
+    variant: 'standard',
+    paymentMode: 'full',
+    escalationMode: 'double',
+};
+
+/**
+ * 預設配置：一二蚊
+ */
+export const CONFIG_12: ScoringConfig = {
+    baseScore: 1,
+    minFan: 0,
+    maxFan: 10,
+    startingScore: 500,
+    variant: 'standard',
+    paymentMode: 'full',
+    escalationMode: 'double',
 };
 
 // ============================================
@@ -596,38 +652,65 @@ function getFansForVariant(variant: RuleVariant): FanType[] {
 // ============================================
 
 /**
+ * 半辣上分數表（四番後交替 x1.5 同 x2）
+ * 以 baseScore = 1 為基準
+ * 支援最高 18 番
+ */
+const HALF_DOUBLE_MULTIPLIERS: number[] = [
+    1,     // 0番
+    2,     // 1番
+    4,     // 2番
+    8,     // 3番
+    16,    // 4番（滿糊）
+    24,    // 5番 = 4番 x 1.5
+    32,    // 6番 = 4番 x 2
+    48,    // 7番 = 6番 x 1.5
+    64,    // 8番 = 6番 x 2
+    96,    // 9番 = 8番 x 1.5
+    128,   // 10番 = 8番 x 2
+    192,   // 11番 = 10番 x 1.5
+    256,   // 12番 = 10番 x 2
+    384,   // 13番（爆棚）= 12番 x 1.5
+    512,   // 14番 = 12番 x 2
+    768,   // 15番 = 14番 x 1.5
+    1024,  // 16番 = 14番 x 2
+    1536,  // 17番 = 16番 x 1.5
+    2048,  // 18番 = 16番 x 2
+];
+
+/**
  * 計算番數對應嘅分數
  * 
- * 廣東牌傳統計法（四番滿糊半辣上）：
- * - 0台: 1
- * - 1番: 2
- * - 2台: 4
- * - 3台: 8
- * - 4台（滿糊）: 16
- * - 5台: 24
- * - 6台: 32
- * - 7台: 48
- * - 8台: 64
- * - 9台: 96
- * - 10台: 128
- * - 11番: 192
- * - 12台: 256
- * - 13台（爆棚）: 384
+ * 辣辣上：每番加倍
+ * - 0番: 1, 1番: 2, 2番: 4, 3番: 8, 4番: 16...
  * 
- * 簡化版：每番加倍（辣辣計）
+ * 半辣上：四番後交替 x1.5 同 x2
+ * - 0-4番正常加倍
+ * - 5番=4番x1.5, 6番=4番x2
+ * - 7番=6番x1.5, 8番=6番x2
+ * - 以此類推
  */
 function calculateBasePoints(
     fan: number,
     baseScore: number,
-    maxFan: number
+    maxFan: number,
+    escalationMode: EscalationMode
 ): number {
     if (fan < 0) return 0;
 
     // 套用封頂
     const effectiveFan = Math.min(fan, maxFan);
 
-    // 辣辣計：底 × 2^番數
-    return baseScore * Math.pow(2, effectiveFan);
+    if (escalationMode === 'double') {
+        // 辣辣上：底 × 2^番數
+        return baseScore * Math.pow(2, effectiveFan);
+    } else {
+        // 半辣上：用預計算嘅乘數表
+        const multiplier = effectiveFan < HALF_DOUBLE_MULTIPLIERS.length
+            ? HALF_DOUBLE_MULTIPLIERS[effectiveFan]
+            : HALF_DOUBLE_MULTIPLIERS[HALF_DOUBLE_MULTIPLIERS.length - 1];
+        return baseScore * multiplier;
+    }
 }
 
 /**
@@ -738,7 +821,8 @@ export function calculateCantoneseScore(
     }
 
     // 計算基本分數
-    const basePoints = calculateBasePoints(totalFan, baseScore, maxFan);
+    const { paymentMode, escalationMode } = config;
+    const basePoints = calculateBasePoints(totalFan, baseScore, maxFan, escalationMode);
 
     // 檢查係咪莊家
     const isDealerWin = winner.id === dealerId;
@@ -748,6 +832,8 @@ export function calculateCantoneseScore(
     const changes: ScoreChange[] = [];
 
     if (winType === 'self-draw') {
+        // 自摸：三家都畀錢
+        // 半銃制同全銃制自摸一樣
         let totalWinAmount = 0;
 
         for (const player of players) {
@@ -776,6 +862,7 @@ export function calculateCantoneseScore(
         });
 
     } else {
+        // 出銃
         if (!loserId) {
             return {
                 totalFan,
@@ -799,33 +886,74 @@ export function calculateCantoneseScore(
             };
         }
 
-        let payment = basePoints;
+        if (paymentMode === 'full') {
+            // 全銃制：出銃者包晒（畀相當於三家嘅錢）
+            // 計算贏家應該贏幾多（同自摸一樣）
+            let totalWinAmount = 0;
+            for (const player of players) {
+                if (player.id === winnerId) continue;
+                let payment = basePoints;
+                if (isDealerWin || player.id === dealerId) {
+                    payment *= 2;
+                }
+                totalWinAmount += payment;
+            }
 
-        // 莊家贏或輸，加倍
-        if (isDealerWin || isDealerLose) {
-            payment *= 2;
-        }
+            // 出銃者畀晒
+            for (const player of players) {
+                if (player.id === winnerId) {
+                    changes.push({
+                        playerId: player.id,
+                        delta: totalWinAmount,
+                        newScore: player.score + totalWinAmount,
+                    });
+                } else if (player.id === loserId) {
+                    changes.push({
+                        playerId: player.id,
+                        delta: -totalWinAmount,
+                        newScore: player.score - totalWinAmount,
+                    });
+                } else {
+                    changes.push({
+                        playerId: player.id,
+                        delta: 0,
+                        newScore: player.score,
+                    });
+                }
+            }
+        } else {
+            // 半銃制：出銃者畀雙倍，其他兩家畀單倍
+            let totalWinAmount = 0;
 
-        for (const player of players) {
-            if (player.id === winnerId) {
-                changes.push({
-                    playerId: player.id,
-                    delta: payment,
-                    newScore: player.score + payment,
-                });
-            } else if (player.id === loserId) {
+            for (const player of players) {
+                if (player.id === winnerId) continue;
+
+                let payment = basePoints;
+
+                // 莊家贏或輸，加倍
+                if (isDealerWin || player.id === dealerId) {
+                    payment *= 2;
+                }
+
+                // 出銃者額外加倍
+                if (player.id === loserId) {
+                    payment *= 2;
+                }
+
+                totalWinAmount += payment;
+
                 changes.push({
                     playerId: player.id,
                     delta: -payment,
                     newScore: player.score - payment,
                 });
-            } else {
-                changes.push({
-                    playerId: player.id,
-                    delta: 0,
-                    newScore: player.score,
-                });
             }
+
+            changes.push({
+                playerId: winnerId,
+                delta: totalWinAmount,
+                newScore: winner.score + totalWinAmount,
+            });
         }
     }
 
