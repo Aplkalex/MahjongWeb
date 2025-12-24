@@ -5,7 +5,7 @@
  * 
  * 計分規則：
  * - 底：$1（可調）
- * - 每台加倍
+ * - 每番加倍
  * - 封頂：8/10/13台（可調）
  * - 最少：0/1/3台起胡（可調）
  * - 自摸：三家畀
@@ -30,7 +30,7 @@ import {
 } from './types';
 
 // ============================================
-// 番種定義（按台數排列）
+// 番種定義（按番數排列）
 // ============================================
 
 /**
@@ -39,7 +39,7 @@ import {
  */
 export const CANTONESE_FAN_TYPES: FanType[] = [
     // ============================================
-    // 零台 (0 Fan)
+    // 零番 (0 Fan)
     // ============================================
     {
         id: 'chicken',
@@ -51,7 +51,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 一台 (1 Fan)
+    // 一番 (1 Fan)
     // ============================================
     {
         id: 'all-chows',
@@ -137,7 +137,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 二台 (2 Fan)
+    // 二番 (2 Fan)
     // ============================================
     {
         id: 'win-on-kong',
@@ -145,7 +145,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
         nameEn: 'Win on Kong',
         value: 2,
         category: 'situational',
-        description: '明/暗/加槓後自摸（包含自摸1台）',
+        description: '明/暗/加槓後自摸（包含自摸1番）',
         includes: ['self-draw'],
     },
     {
@@ -158,7 +158,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 三台 (3 Fan)
+    // 三番 (3 Fan)
     // ============================================
     {
         id: 'flower-win',
@@ -190,7 +190,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 四台 (4 Fan)
+    // 四番 (4 Fan)
     // ============================================
     {
         id: 'mixed-terminals',
@@ -204,7 +204,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 五台 (5 Fan)
+    // 五番 (5 Fan)
     // ============================================
     {
         id: 'small-dragons',
@@ -217,7 +217,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 七台 (7 Fan)
+    // 七番 (7 Fan)
     // ============================================
     {
         id: 'full-flush',
@@ -231,7 +231,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 八台 (8 Fan)
+    // 八番 (8 Fan)
     // ============================================
     {
         id: 'big-dragons',
@@ -274,7 +274,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 九台 (9 Fan)
+    // 九番 (9 Fan)
     // ============================================
     {
         id: 'small-four-winds',
@@ -287,7 +287,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 十台 (10 Fan) - 例牌
+    // 十番 (10 Fan) - 例牌
     // ============================================
     {
         id: 'all-honors',
@@ -322,7 +322,7 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
     },
 
     // ============================================
-    // 十三台 (13 Fan) - 例牌
+    // 十三番 (13 Fan) - 例牌
     // ============================================
     {
         id: 'heavenly-win',
@@ -538,15 +538,69 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
 };
 
 // ============================================
+// 優化：預計算 Lookup Maps (O(1) access)
+// ============================================
+
+/** Fan ID -> FanType lookup map */
+const FAN_BY_ID = new Map<string, FanType>(
+    CANTONESE_FAN_TYPES.map((fan) => [fan.id, fan])
+);
+
+/** Pre-filtered fans by variant */
+const STANDARD_FANS = CANTONESE_FAN_TYPES.filter(
+    (f) => !f.variant || f.variant === 'both' || f.variant === 'standard'
+);
+
+const CUSTOM_FANS = CANTONESE_FAN_TYPES.filter(
+    (f) => f.variant === 'custom'
+);
+
+const ALL_FANS_FOR_STANDARD = CANTONESE_FAN_TYPES.filter(
+    (f) => !f.variant || f.variant === 'both'
+);
+
+const ALL_FANS_FOR_CUSTOM = CANTONESE_FAN_TYPES.filter(
+    (f) => !f.variant || f.variant === 'both' || f.variant === 'custom'
+);
+
+/** Limit fans */
+const LIMIT_FANS = CANTONESE_FAN_TYPES.filter((f) => f.isLimit);
+
+/** Common fan IDs for quick lookup */
+const COMMON_FAN_IDS = new Set([
+    'all-chows',
+    'all-pungs',
+    'half-flush',
+    'full-flush',
+    'self-draw',
+    'concealed',
+    'dragon-pung',
+]);
+
+/**
+ * 快速取得番種 by ID (O(1))
+ */
+export function getFanById(id: string): FanType | undefined {
+    return FAN_BY_ID.get(id);
+}
+
+/**
+ * 取得適用於指定變體嘅所有番種 (cached)
+ */
+function getFansForVariant(variant: RuleVariant): FanType[] {
+    return variant === 'standard' ? ALL_FANS_FOR_STANDARD : ALL_FANS_FOR_CUSTOM;
+}
+
+// ============================================
 // 計分邏輯
 // ============================================
 
 /**
  * 計算番數對應嘅分數
  * 
- * 廣東牌傳統計法（四台滿糊半辣上）：
+ * 廣東牌傳統計法（四番滿糊半辣上）：
  * - 0台: 1
- * - 1台: 2
+ * - 1番: 2
  * - 2台: 4
  * - 3台: 8
  * - 4台（滿糊）: 16
@@ -556,11 +610,11 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
  * - 8台: 64
  * - 9台: 96
  * - 10台: 128
- * - 11台: 192
+ * - 11番: 192
  * - 12台: 256
  * - 13台（爆棚）: 384
  * 
- * 簡化版：每台加倍（辣辣計）
+ * 簡化版：每番加倍（辣辣計）
  */
 function calculateBasePoints(
     fan: number,
@@ -577,43 +631,49 @@ function calculateBasePoints(
 }
 
 /**
- * 計算選擇咗嘅番種總番數
+ * 計算選擇咗嘅番種總番數（優化版）
  * 處理互斥、包含、暗示規則
+ * 使用 Map lookup 代替 .find() 提升效能
  */
 function calculateTotalFan(
     selectedFanIds: string[],
-    fanTypes: FanType[],
     variant: RuleVariant
 ): { totalFan: number; validFans: FanType[] } {
     const validFans: FanType[] = [];
     const includedIds = new Set<string>();
     const impliedIds = new Set<string>();
+    const selectedSet = new Set(selectedFanIds);
 
-    // Filter by variant
-    const availableFans = fanTypes.filter((f) => {
-        if (!f.variant || f.variant === 'both') return true;
-        return f.variant === variant;
-    });
+    // Use cached fans for variant
+    const availableFans = getFansForVariant(variant);
+    const availableMap = new Map<string, FanType>(
+        availableFans.map((f) => [f.id, f])
+    );
 
     // 先收集所有「已包含」同「已暗示」嘅番
     for (const fanId of selectedFanIds) {
-        const fan = availableFans.find((f) => f.id === fanId);
-        if (fan?.includes) {
-            fan.includes.forEach((id) => includedIds.add(id));
+        const fan = availableMap.get(fanId);
+        if (!fan) continue;
+
+        if (fan.includes) {
+            for (const id of fan.includes) {
+                includedIds.add(id);
+            }
         }
-        if (fan?.impliedBy) {
-            fan.impliedBy.forEach((id) => {
-                if (selectedFanIds.includes(id)) {
+        if (fan.impliedBy) {
+            for (const id of fan.impliedBy) {
+                if (selectedSet.has(id)) {
                     impliedIds.add(fan.id);
+                    break;
                 }
-            });
+            }
         }
     }
 
     // 計算有效番數
     let totalFan = 0;
     for (const fanId of selectedFanIds) {
-        const fan = availableFans.find((f) => f.id === fanId);
+        const fan = availableMap.get(fanId);
         if (!fan) continue;
 
         // 如果呢個番已經被其他番包含或暗示，唔計
@@ -659,7 +719,6 @@ export function calculateCantoneseScore(
     } else {
         const { totalFan: calculatedFan, validFans } = calculateTotalFan(
             params.selectedFanIds,
-            CANTONESE_FAN_TYPES,
             variant
         );
         totalFan = calculatedFan;
@@ -843,66 +902,51 @@ export const CANTONESE_RULESET: RuleSet = {
 };
 
 // ============================================
-// 輔助函數
+// 輔助函數（已優化）
 // ============================================
 
 /**
- * 按分類取得番種
+ * 按分類取得番種（使用 cached variant arrays）
  */
 export function getFansByCategory(
     category: FanCategory,
     variant: RuleVariant = 'standard'
 ): FanType[] {
-    return CANTONESE_FAN_TYPES.filter((f) => {
-        if (f.category !== category) return false;
-        if (!f.variant || f.variant === 'both') return true;
-        return f.variant === variant;
-    });
+    const fans = getFansForVariant(variant);
+    return fans.filter((f) => f.category === category);
 }
 
 /**
- * 取得常用番種
+ * 取得常用番種（使用 Set 做 O(1) lookup）
  */
 export function getCommonFans(variant: RuleVariant = 'standard'): FanType[] {
-    const commonIds = [
-        'all-chows',
-        'all-pungs',
-        'half-flush',
-        'full-flush',
-        'self-draw',
-        'concealed',
-        'dragon-pung',
-    ];
-    return CANTONESE_FAN_TYPES.filter((f) => {
-        if (!commonIds.includes(f.id)) return false;
-        if (!f.variant || f.variant === 'both') return true;
-        return f.variant === variant;
-    });
+    const fans = getFansForVariant(variant);
+    return fans.filter((f) => COMMON_FAN_IDS.has(f.id));
 }
 
 /**
- * 取得所有標準番種
+ * 取得所有標準番種（cached）
  */
 export function getStandardFans(): FanType[] {
-    return CANTONESE_FAN_TYPES.filter((f) => !f.variant || f.variant === 'both' || f.variant === 'standard');
+    return STANDARD_FANS;
 }
 
 /**
- * 取得所有新章番種
+ * 取得所有新章番種（cached）
  */
 export function getCustomFans(): FanType[] {
-    return CANTONESE_FAN_TYPES.filter((f) => f.variant === 'custom');
+    return CUSTOM_FANS;
 }
 
 /**
- * 取得所有例牌
+ * 取得所有例牌（cached）
  */
 export function getLimitFans(): FanType[] {
-    return CANTONESE_FAN_TYPES.filter((f) => f.isLimit);
+    return LIMIT_FANS;
 }
 
 /**
- * 檢查番種組合係咪有效
+ * 檢查番種組合係咪有效（使用 Map lookup）
  */
 export function validateFanCombination(
     fanIds: string[]
@@ -910,12 +954,12 @@ export function validateFanCombination(
     const conflicts: string[][] = [];
 
     for (let i = 0; i < fanIds.length; i++) {
-        const fan = CANTONESE_FAN_TYPES.find((f) => f.id === fanIds[i]);
+        const fan = FAN_BY_ID.get(fanIds[i]);
         if (!fan?.incompatibleWith) continue;
 
         for (let j = i + 1; j < fanIds.length; j++) {
             if (fan.incompatibleWith.includes(fanIds[j])) {
-                const conflictFan = CANTONESE_FAN_TYPES.find((f) => f.id === fanIds[j]);
+                const conflictFan = FAN_BY_ID.get(fanIds[j]);
                 conflicts.push([fan.name, conflictFan?.name || fanIds[j]]);
             }
         }

@@ -21,6 +21,7 @@ export {
     calculateCantoneseScore,
     calculateScoreProMode,
     calculateScoreNormalMode,
+    getFanById,
     getFansByCategory,
     getCommonFans,
     getStandardFans,

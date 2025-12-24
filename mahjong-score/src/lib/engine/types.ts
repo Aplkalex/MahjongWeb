@@ -92,7 +92,7 @@ export interface FanType {
     name: string;
     /** 英文名 */
     nameEn: string;
-    /** 番數（台數） */
+    /** 番數（番數） */
     value: number;
     /** 分類 */
     category: FanCategory;
