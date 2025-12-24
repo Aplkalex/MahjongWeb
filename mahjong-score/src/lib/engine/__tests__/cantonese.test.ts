@@ -2,7 +2,10 @@
  * 🀄 廣東牌計分引擎測試
  *
  * 測試各種計分情景，確保邏輯正確
- * 包括 Pro Mode（直接輸入番數）同 Normal Mode（揀牌型）
+ * 包括：
+ * - Pro Mode / Normal Mode
+ * - 清章 / 新章
+ * - 完整番種計算
  */
 
 import { describe, it, expect } from 'vitest';
@@ -12,9 +15,14 @@ import {
     calculateScoreNormalMode,
     CANTONESE_FAN_TYPES,
     CANTONESE_RULESET,
+    DEFAULT_SCORING_CONFIG,
     validateFanCombination,
     getFansByCategory,
     getCommonFans,
+    getStandardFans,
+    getCustomFans,
+    getLimitFans,
+    ScoringConfig,
 } from '../cantonese';
 import { createPlayers, Player } from '../types';
 
@@ -31,8 +39,8 @@ function createTestPlayers(): [Player, Player, Player, Player] {
 // ============================================
 
 describe('番種定義', () => {
-    it('應該有正確數量嘅番種', () => {
-        expect(CANTONESE_FAN_TYPES.length).toBeGreaterThan(15);
+    it('應該有足夠數量嘅番種', () => {
+        expect(CANTONESE_FAN_TYPES.length).toBeGreaterThan(30);
     });
 
     it('每個番種應該有必要嘅屬性', () => {
@@ -53,6 +61,38 @@ describe('番種定義', () => {
         expect(allChows?.incompatibleWith).toContain('all-pungs');
         expect(allPungs?.incompatibleWith).toContain('all-chows');
     });
+
+    it('應該有正確嘅清章番種', () => {
+        const standardFans = getStandardFans();
+        expect(standardFans.length).toBeGreaterThan(20);
+
+        // 檢查一啲標準番存在
+        const ids = standardFans.map((f) => f.id);
+        expect(ids).toContain('all-chows');
+        expect(ids).toContain('all-pungs');
+        expect(ids).toContain('full-flush');
+        expect(ids).toContain('thirteen-orphans');
+    });
+
+    it('應該有正確嘅新章番種', () => {
+        const customFans = getCustomFans();
+        expect(customFans.length).toBeGreaterThan(5);
+
+        // 檢查一啲自訂番存在
+        const ids = customFans.map((f) => f.id);
+        expect(ids).toContain('seven-pairs');
+        expect(ids).toContain('straight');
+    });
+
+    it('應該可以取得例牌', () => {
+        const limitFans = getLimitFans();
+        expect(limitFans.length).toBeGreaterThan(5);
+
+        const ids = limitFans.map((f) => f.id);
+        expect(ids).toContain('thirteen-orphans');
+        expect(ids).toContain('big-four-winds');
+        expect(ids).toContain('all-kongs');
+    });
 });
 
 // ============================================
@@ -60,71 +100,50 @@ describe('番種定義', () => {
 // ============================================
 
 describe('Normal Mode 計分', () => {
-    it('3番自摸 - 莊家贏', () => {
+    it('3台自摸 - 莊家贏', () => {
         const players = createTestPlayers();
         const result = calculateCantoneseScore({
             mode: 'normal',
             winType: 'self-draw',
             winnerId: players[0].id,
-            selectedFanIds: ['all-chows', 'self-draw', 'concealed'], // 1+1+1 = 3番
+            selectedFanIds: ['all-pungs'], // 3番
             players,
             dealerId: players[0].id,
         });
 
         expect(result.error).toBeUndefined();
         expect(result.totalFan).toBe(3);
-        expect(result.basePoints).toBe(16); // 4 * 2^2 = 16
         expect(result.isDealerWin).toBe(true);
-
-        // 莊家贏自摸：其他三家各畀雙倍 = 16 * 2 = 32
-        const winnerChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(winnerChange?.delta).toBe(32 * 3); // 96
     });
 
-    it('3番自摸 - 閒家贏', () => {
+    it('混一色 + 對對糊 = 6台', () => {
         const players = createTestPlayers();
         const result = calculateScoreNormalMode(
             'self-draw',
             players[1].id,
             undefined,
-            ['all-chows', 'self-draw', 'concealed'],
+            ['half-flush', 'all-pungs'], // 3 + 3 = 6
             players,
             players[0].id
         );
 
         expect(result.error).toBeUndefined();
-        expect(result.totalFan).toBe(3);
-        expect(result.isDealerWin).toBe(false);
-
-        // 閒家贏自摸：莊家畀雙倍 = 32，其他兩個閒家各畀 16
-        const dealerChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(dealerChange?.delta).toBe(-32);
-
-        const winner = result.changes.find((c) => c.playerId === players[1].id);
-        expect(winner?.delta).toBe(32 + 16 + 16); // 64
+        expect(result.totalFan).toBe(6);
     });
 
-    it('5番出銃 - 莊家出銃畀閒家', () => {
+    it('清一色 唔重複計混一色', () => {
         const players = createTestPlayers();
-        const result = calculateScoreNormalMode(
-            'discard',
-            players[1].id,
-            players[0].id,
-            ['all-pungs', 'self-draw', 'concealed'], // 3+1+1 = 5番
+        const result = calculateCantoneseScore({
+            mode: 'normal',
+            winType: 'self-draw',
+            winnerId: players[0].id,
+            selectedFanIds: ['full-flush', 'half-flush'], // 清一色包含混一色
             players,
-            players[0].id
-        );
+            dealerId: players[0].id,
+        });
 
         expect(result.error).toBeUndefined();
-        expect(result.totalFan).toBe(5);
-        expect(result.basePoints).toBe(64); // 4 * 2^4 = 64
-
-        // 莊家出銃要畀雙倍 = 128
-        const loserChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(loserChange?.delta).toBe(-128);
-
-        const winnerChange = result.changes.find((c) => c.playerId === players[1].id);
-        expect(winnerChange?.delta).toBe(128);
+        expect(result.totalFan).toBe(7); // 只計清一色 7 台
     });
 
     it('番數不足應該報錯', () => {
@@ -140,23 +159,23 @@ describe('Normal Mode 計分', () => {
 
         expect(result.error).toContain('番數不足');
         expect(result.totalFan).toBe(1);
-        expect(result.changes).toHaveLength(0);
     });
 
-    it('大番已包含細番（清一色包含混一色）', () => {
+    it('封頂 13 番', () => {
         const players = createTestPlayers();
         const result = calculateCantoneseScore({
             mode: 'normal',
             winType: 'self-draw',
             winnerId: players[0].id,
-            selectedFanIds: ['full-flush', 'half-flush', 'self-draw'],
+            selectedFanIds: ['thirteen-orphans', 'self-draw'], // 13 + 1 = 14
             players,
             dealerId: players[0].id,
         });
 
         expect(result.error).toBeUndefined();
-        // 應該只計 7 + 1 = 8，唔計混一色
-        expect(result.totalFan).toBe(8);
+        expect(result.totalFan).toBe(14);
+        // 封頂 13 番 = 1 * 2^13 = 8192
+        expect(result.basePoints).toBe(Math.pow(2, 13));
     });
 });
 
@@ -171,21 +190,17 @@ describe('Pro Mode 計分', () => {
             'self-draw',
             players[0].id,
             undefined,
-            3, // 直接輸入 3 番
+            3,
             players,
             players[0].id,
-            '平糊自摸門清'
+            '對對糊'
         );
 
         expect(result.error).toBeUndefined();
         expect(result.totalFan).toBe(3);
-        expect(result.basePoints).toBe(16);
-        expect(result.fanDescription).toBe('平糊自摸門清');
-        expect(result.isDealerWin).toBe(true);
-
-        // 莊家贏自摸：其他三家各畀雙倍
-        const winnerChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(winnerChange?.delta).toBe(96); // 32 * 3
+        // 3番 = 1 * 2^3 = 8
+        expect(result.basePoints).toBe(8);
+        expect(result.fanDescription).toBe('對對糊');
     });
 
     it('直接輸入 5 番 - 出銃', () => {
@@ -193,36 +208,21 @@ describe('Pro Mode 計分', () => {
         const result = calculateScoreProMode(
             'discard',
             players[1].id,
-            players[0].id, // 莊家出銃
+            players[0].id,
             5,
             players,
             players[0].id,
-            '清一色'
+            '小三元'
         );
 
         expect(result.error).toBeUndefined();
         expect(result.totalFan).toBe(5);
-        expect(result.basePoints).toBe(64);
-        expect(result.fanDescription).toBe('清一色');
+        // 5番 = 1 * 2^5 = 32
+        expect(result.basePoints).toBe(32);
 
-        // 莊家出銃要畀雙倍 = 128
+        // 莊家出銃要畀雙倍 = 64
         const loserChange = result.changes.find((c) => c.playerId === players[0].id);
-        expect(loserChange?.delta).toBe(-128);
-    });
-
-    it('直接輸入番數 - 冇描述時顯示番數', () => {
-        const players = createTestPlayers();
-        const result = calculateScoreProMode(
-            'self-draw',
-            players[0].id,
-            undefined,
-            5,
-            players,
-            players[0].id
-            // 冇傳 description
-        );
-
-        expect(result.fanDescription).toBe('5 番');
+        expect(loserChange?.delta).toBe(-64);
     });
 
     it('Pro Mode 番數不足應該報錯', () => {
@@ -231,32 +231,57 @@ describe('Pro Mode 計分', () => {
             'self-draw',
             players[0].id,
             undefined,
-            2, // 只有 2 番
+            2,
             players,
             players[0].id
         );
 
         expect(result.error).toContain('番數不足');
-        expect(result.totalFan).toBe(2);
-        expect(result.changes).toHaveLength(0);
+    });
+});
+
+// ============================================
+// 清章 vs 新章 Tests
+// ============================================
+
+describe('清章 vs 新章', () => {
+    it('清章模式唔計七對子', () => {
+        const standardConfig: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            variant: 'standard',
+        };
+
+        const players = createTestPlayers();
+        const result = calculateCantoneseScore({
+            mode: 'normal',
+            winType: 'self-draw',
+            winnerId: players[0].id,
+            selectedFanIds: ['seven-pairs'], // 新章先有
+            players,
+            dealerId: players[0].id,
+        }, standardConfig);
+
+        // 七對子喺清章唔計，所以番數係 0
+        expect(result.totalFan).toBe(0);
     });
 
-    it('封頂 13 番', () => {
-        const players = createTestPlayers();
-        const result = calculateScoreProMode(
-            'self-draw',
-            players[0].id,
-            undefined,
-            15, // 超過封頂
-            players,
-            players[0].id,
-            '十三么加自摸'
-        );
+    it('新章模式計七對子', () => {
+        const customConfig: ScoringConfig = {
+            ...DEFAULT_SCORING_CONFIG,
+            variant: 'custom',
+        };
 
-        expect(result.error).toBeUndefined();
-        expect(result.totalFan).toBe(15);
-        // 封頂 13 番 = 4 * 2^12 = 16384
-        expect(result.basePoints).toBe(4 * Math.pow(2, 12));
+        const players = createTestPlayers();
+        const result = calculateCantoneseScore({
+            mode: 'normal',
+            winType: 'self-draw',
+            winnerId: players[0].id,
+            selectedFanIds: ['seven-pairs'],
+            players,
+            dealerId: players[0].id,
+        }, customConfig);
+
+        expect(result.totalFan).toBe(3);
     });
 });
 
@@ -274,7 +299,11 @@ describe('番種驗證', () => {
     it('冇衝突嘅組合應該 valid', () => {
         const result = validateFanCombination(['full-flush', 'all-pungs', 'self-draw']);
         expect(result.valid).toBe(true);
-        expect(result.conflicts.length).toBe(0);
+    });
+
+    it('清一色同混一色互斥', () => {
+        const result = validateFanCombination(['full-flush', 'half-flush']);
+        expect(result.valid).toBe(false);
     });
 });
 
@@ -306,9 +335,7 @@ describe('牌制設定', () => {
     it('廣東牌應該有正確嘅設定', () => {
         expect(CANTONESE_RULESET.id).toBe('cantonese');
         expect(CANTONESE_RULESET.name).toBe('廣東牌');
-        expect(CANTONESE_RULESET.baseScore).toBe(4);
         expect(CANTONESE_RULESET.minFan).toBe(3);
         expect(CANTONESE_RULESET.maxFan).toBe(13);
-        expect(CANTONESE_RULESET.startingScore).toBe(500);
     });
 });

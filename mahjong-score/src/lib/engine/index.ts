@@ -4,9 +4,10 @@
  * 呢個模組係成個 app 嘅心臟。
  * 純邏輯，冇 React，可以獨立測試。
  * 
- * 支援兩種輸入模式：
- * - Pro Mode: 直接輸入番數（老手用）
- * - Normal Mode: 揀牌型計番（新手用）
+ * 支援：
+ * - 兩種輸入模式：Pro Mode / Normal Mode
+ * - 兩種規則變體：清章 / 新章
+ * - 完整番種表（根據 Wikipedia）
  */
 
 // 核心類型
@@ -16,13 +17,19 @@ export * from './types';
 export {
     CANTONESE_RULESET,
     CANTONESE_FAN_TYPES,
+    DEFAULT_SCORING_CONFIG,
     calculateCantoneseScore,
     calculateScoreProMode,
     calculateScoreNormalMode,
     getFansByCategory,
     getCommonFans,
+    getStandardFans,
+    getCustomFans,
+    getLimitFans,
     validateFanCombination,
 } from './cantonese';
+
+export type { ScoringConfig } from './cantonese';
 
 // 導入所有牌制
 import { CANTONESE_RULESET } from './cantonese';
@@ -46,9 +53,8 @@ export function getRuleSet(id: RuleSetId): RuleSet {
 }
 
 /**
- * 取得所有牌制（用於選擇畫面）
+ * 取得所有牌制
  */
 export function getAllRuleSets(): RuleSet[] {
-    // 只返回真正實現咗嘅牌制
     return [CANTONESE_RULESET];
 }

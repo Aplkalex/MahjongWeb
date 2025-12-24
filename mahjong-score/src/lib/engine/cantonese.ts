@@ -1,20 +1,27 @@
 /**
- * 🀄 廣東牌計分規則
+ * 🀄 廣東牌（香港牌）計分規則
  * 
- * 廣東牌（港式）計分規則：
- * - 底：$4（可調）
- * - 每番加倍
- * - 封頂：13番（可調）
- * - 最少：3番（可調）
+ * 根據 Wikipedia 香港麻將條目整理
+ * 
+ * 計分規則：
+ * - 底：$1（可調）
+ * - 每台加倍
+ * - 封頂：8/10/13台（可調）
+ * - 最少：0/1/3台起胡（可調）
  * - 自摸：三家畀
- * - 出銃：出銃者一人畀
+ * - 出銃：全銃 / 陪銃
  * - 莊家：贏/輸都加倍
+ * 
+ * 支援：
+ * - 清章（正統牌型）
+ * - 新章（加入自訂牌型）
  */
 
 import {
     FanType,
     FanCategory,
     RuleSet,
+    RuleVariant,
     ScoreCalculationParams,
     ScoreResult,
     ScoreChange,
@@ -23,189 +30,94 @@ import {
 } from './types';
 
 // ============================================
-// 番種定義
+// 番種定義（按台數排列）
 // ============================================
 
 /**
- * 廣東牌所有番種
- * 按照分類同番數排列
+ * 香港麻將完整番種表
+ * 根據 Wikipedia 整理
  */
 export const CANTONESE_FAN_TYPES: FanType[] = [
-    // ============ 基本 (Basic) ============
+    // ============================================
+    // 零台 (0 Fan)
+    // ============================================
     {
         id: 'chicken',
-        name: '雞糊',
+        name: '屁胡',
         nameEn: 'Chicken Hand',
         value: 0,
         category: 'basic',
-        description: '冇番，但滿足最低要求時可以食',
+        description: '單純四搭一對，無任何其他組合',
     },
+
+    // ============================================
+    // 一台 (1 Fan)
+    // ============================================
     {
         id: 'all-chows',
-        name: '平糊',
+        name: '平胡',
         nameEn: 'All Chows',
         value: 1,
         category: 'basic',
-        description: '全部係順子，冇刻子',
+        description: '只有順子、沒有刻子的牌型',
         incompatibleWith: ['all-pungs'],
     },
-
-    // ============ 刻子相關 (Triplets) ============
     {
-        id: 'all-pungs',
-        name: '對對糊',
-        nameEn: 'All Pungs',
-        value: 3,
-        category: 'triplets',
-        description: '全部係刻子（碰碰糊）',
-        incompatibleWith: ['all-chows'],
-    },
-
-    // ============ 花色相關 (Suits) ============
-    {
-        id: 'half-flush',
-        name: '混一色',
-        nameEn: 'Half Flush',
-        value: 3,
-        category: 'suits',
-        description: '一種花色加字牌',
-        incompatibleWith: ['full-flush', 'all-honors'],
+        id: 'no-flowers',
+        name: '無花',
+        nameEn: 'No Flowers',
+        value: 1,
+        category: 'flowers',
+        description: '沒有花牌',
     },
     {
-        id: 'full-flush',
-        name: '清一色',
-        nameEn: 'Full Flush',
-        value: 7,
-        category: 'suits',
-        description: '全部同一種花色，冇字牌',
-        incompatibleWith: ['half-flush', 'all-honors'],
-        includes: ['half-flush'],
+        id: 'seat-flower',
+        name: '正花',
+        nameEn: 'Seat Flower',
+        value: 1,
+        category: 'flowers',
+        description: '花牌跟座位吻合（東=春/梅、南=夏/蘭、西=秋/菊、北=冬/竹）',
     },
-    {
-        id: 'all-honors',
-        name: '字一色',
-        nameEn: 'All Honors',
-        value: 10,
-        category: 'suits',
-        description: '全部係字牌（風牌同三元牌）',
-        incompatibleWith: ['half-flush', 'full-flush'],
-    },
-
-    // ============ 字牌相關 (Honors) ============
-    {
-        id: 'small-dragons',
-        name: '小三元',
-        nameEn: 'Small Three Dragons',
-        value: 5,
-        category: 'honors',
-        description: '兩組三元刻子，一組三元對子',
-        incompatibleWith: ['big-dragons'],
-    },
-    {
-        id: 'big-dragons',
-        name: '大三元',
-        nameEn: 'Big Three Dragons',
-        value: 8,
-        category: 'honors',
-        description: '三組三元刻子（中發白）',
-        incompatibleWith: ['small-dragons'],
-        includes: ['small-dragons'],
-    },
-    {
-        id: 'small-winds',
-        name: '小四喜',
-        nameEn: 'Small Four Winds',
-        value: 6,
-        category: 'honors',
-        description: '三組風刻子，一組風對子',
-        incompatibleWith: ['big-winds'],
-    },
-    {
-        id: 'big-winds',
-        name: '大四喜',
-        nameEn: 'Big Four Winds',
-        value: 13,
-        category: 'honors',
-        description: '四組風刻子（東南西北）',
-        incompatibleWith: ['small-winds'],
-        includes: ['small-winds'],
-    },
-
-    // ============ 特殊 (Special) ============
-    {
-        id: 'seven-pairs',
-        name: '七對',
-        nameEn: 'Seven Pairs',
-        value: 4,
-        category: 'special',
-        description: '七個對子',
-    },
-    {
-        id: 'thirteen-orphans',
-        name: '十三么',
-        nameEn: 'Thirteen Orphans',
-        value: 13,
-        category: 'special',
-        description: '所有么九牌加字牌各一隻',
-    },
-    {
-        id: 'nine-gates',
-        name: '九蓮寶燈',
-        nameEn: 'Nine Gates',
-        value: 13,
-        category: 'special',
-        description: '1112345678999 同一花色',
-        includes: ['full-flush'],
-    },
-    {
-        id: 'all-kongs',
-        name: '十八羅漢',
-        nameEn: 'All Kongs',
-        value: 13,
-        category: 'special',
-        description: '四組槓子',
-    },
-
-    // ============ 情景 (Situational) ============
     {
         id: 'self-draw',
         name: '自摸',
         nameEn: 'Self Draw',
         value: 1,
         category: 'situational',
-        description: '自己摸牌食糊',
+        description: '自己摸出胡牌之牌',
     },
     {
         id: 'concealed',
-        name: '門清',
+        name: '門前清',
         nameEn: 'Concealed Hand',
         value: 1,
         category: 'situational',
-        description: '冇碰冇槓，全部暗牌',
+        description: '沒有上、碰、槓任何牌而胡牌',
+        impliedBy: ['four-concealed-pungs', 'thirteen-orphans', 'nine-gates'],
     },
     {
-        id: 'last-tile-draw',
-        name: '海底撈月',
-        nameEn: 'Win on Last Tile (Self Draw)',
+        id: 'dragon-pung',
+        name: '三元牌刻',
+        nameEn: 'Dragon Pung',
         value: 1,
-        category: 'situational',
-        description: '摸最後一隻牌食糊',
+        category: 'honors',
+        description: '擁有一副三元牌（中/發/白）刻子',
     },
     {
-        id: 'last-tile-discard',
-        name: '河底撈魚',
-        nameEn: 'Win on Last Tile (Discard)',
+        id: 'seat-wind',
+        name: '門風刻',
+        nameEn: 'Seat Wind Pung',
         value: 1,
-        category: 'situational',
-        description: '最後一隻打出嘅牌食糊',
+        category: 'honors',
+        description: '擁有一副跟門風吻合的風牌刻子',
     },
     {
-        id: 'win-on-kong',
-        name: '槓上開花',
-        nameEn: 'Win on Kong',
+        id: 'round-wind',
+        name: '圈風刻',
+        nameEn: 'Round Wind Pung',
         value: 1,
-        category: 'situational',
-        description: '槓後摸嘅牌食糊',
+        category: 'honors',
+        description: '擁有一副跟圈風吻合的風牌刻子',
     },
     {
         id: 'robbing-kong',
@@ -213,64 +125,499 @@ export const CANTONESE_FAN_TYPES: FanType[] = [
         nameEn: 'Robbing the Kong',
         value: 1,
         category: 'situational',
-        description: '人哋加槓時搶糊',
+        description: '聽牌時別家槓出自己所聽之牌，搶其槓胡牌',
+    },
+    {
+        id: 'last-tile',
+        name: '海底撈月',
+        nameEn: 'Win on Last Tile',
+        value: 1,
+        category: 'situational',
+        description: '摸全局最後一隻牌食糊',
+    },
+
+    // ============================================
+    // 二台 (2 Fan)
+    // ============================================
+    {
+        id: 'win-on-kong',
+        name: '槓上開花',
+        nameEn: 'Win on Kong',
+        value: 2,
+        category: 'situational',
+        description: '明/暗/加槓後自摸（包含自摸1台）',
+        includes: ['self-draw'],
+    },
+    {
+        id: 'one-suit-flowers',
+        name: '一臺花',
+        nameEn: 'Full Set Flowers',
+        value: 2,
+        category: 'flowers',
+        description: '集齊同一系列的花牌（梅蘭菊竹或春夏秋冬）',
+    },
+
+    // ============================================
+    // 三台 (3 Fan)
+    // ============================================
+    {
+        id: 'flower-win',
+        name: '花胡',
+        nameEn: 'Flower Win',
+        value: 3,
+        category: 'flowers',
+        description: '集齊七隻花牌可即時胡牌（含自摸）',
+        includes: ['self-draw'],
+    },
+    {
+        id: 'all-pungs',
+        name: '對對胡',
+        nameEn: 'All Pungs',
+        value: 3,
+        category: 'triplets',
+        description: '只有刻子的牌型',
+        incompatibleWith: ['all-chows'],
+        impliedBy: ['four-concealed-pungs', 'all-kongs', 'big-four-winds'],
+    },
+    {
+        id: 'half-flush',
+        name: '混一色',
+        nameEn: 'Half Flush',
+        value: 3,
+        category: 'suits',
+        description: '只有一門序數牌跟字牌',
+        incompatibleWith: ['full-flush', 'all-honors'],
+    },
+
+    // ============================================
+    // 四台 (4 Fan)
+    // ============================================
+    {
+        id: 'mixed-terminals',
+        name: '花么九',
+        nameEn: 'Mixed Terminals',
+        value: 4,
+        category: 'terminals',
+        description: '只有么九及字牌的對對胡',
+        includes: ['all-pungs'],
+        incompatibleWith: ['pure-terminals'],
+    },
+
+    // ============================================
+    // 五台 (5 Fan)
+    // ============================================
+    {
+        id: 'small-dragons',
+        name: '小三元',
+        nameEn: 'Small Three Dragons',
+        value: 5,
+        category: 'honors',
+        description: '兩副三元牌刻子，一對三元牌將',
+        incompatibleWith: ['big-dragons'],
+    },
+
+    // ============================================
+    // 七台 (7 Fan)
+    // ============================================
+    {
+        id: 'full-flush',
+        name: '清一色',
+        nameEn: 'Full Flush',
+        value: 7,
+        category: 'suits',
+        description: '只有一門序數牌，沒有字牌',
+        incompatibleWith: ['half-flush', 'all-honors'],
+        includes: ['half-flush'],
+    },
+
+    // ============================================
+    // 八台 (8 Fan)
+    // ============================================
+    {
+        id: 'big-dragons',
+        name: '大三元',
+        nameEn: 'Big Three Dragons',
+        value: 8,
+        category: 'honors',
+        description: '集齊中、發、白三個刻子',
+        incompatibleWith: ['small-dragons'],
+        includes: ['small-dragons'],
+    },
+    {
+        id: 'double-kong-win',
+        name: '連槓開花',
+        nameEn: 'Double Kong Win',
+        value: 8,
+        category: 'situational',
+        description: '連開超過一槓後自摸胡牌',
+        includes: ['win-on-kong', 'self-draw'],
+    },
+    {
+        id: 'eight-flowers',
+        name: '大花胡',
+        nameEn: 'Eight Flowers',
+        value: 8,
+        category: 'flowers',
+        description: '摸齊八隻花可即時胡牌',
+        includes: ['flower-win', 'self-draw'],
+        isLimit: true,
+    },
+    {
+        id: 'four-concealed-pungs',
+        name: '坎坎胡',
+        nameEn: 'Four Concealed Pungs',
+        value: 8,
+        category: 'triplets',
+        description: '沒有碰、槓過的對對胡（四暗刻）',
+        includes: ['all-pungs', 'concealed'],
+        isLimit: true,
+    },
+
+    // ============================================
+    // 九台 (9 Fan)
+    // ============================================
+    {
+        id: 'small-four-winds',
+        name: '小四喜',
+        nameEn: 'Small Four Winds',
+        value: 9,
+        category: 'honors',
+        description: '三副風牌刻子，一對風牌將',
+        incompatibleWith: ['big-four-winds'],
+    },
+
+    // ============================================
+    // 十台 (10 Fan) - 例牌
+    // ============================================
+    {
+        id: 'all-honors',
+        name: '字一色',
+        nameEn: 'All Honors',
+        value: 10,
+        category: 'suits',
+        description: '只有字牌的胡牌牌型',
+        incompatibleWith: ['half-flush', 'full-flush'],
+        isLimit: true,
+    },
+    {
+        id: 'pure-terminals',
+        name: '清么九',
+        nameEn: 'Pure Terminals',
+        value: 10,
+        category: 'terminals',
+        description: '只有么九牌的對對胡',
+        includes: ['mixed-terminals', 'all-pungs'],
+        incompatibleWith: ['mixed-terminals'],
+        isLimit: true,
+    },
+    {
+        id: 'nine-gates',
+        name: '九蓮寶燈',
+        nameEn: 'Nine Gates',
+        value: 10,
+        category: 'special',
+        description: '門清狀態 1112345678999 同一花色',
+        includes: ['full-flush', 'concealed'],
+        isLimit: true,
+    },
+
+    // ============================================
+    // 十三台 (13 Fan) - 例牌
+    // ============================================
+    {
+        id: 'heavenly-win',
+        name: '天胡',
+        nameEn: 'Heavenly Win',
+        value: 13,
+        category: 'limit',
+        description: '莊家開局補花後立即自摸',
+        includes: ['self-draw'],
+        isLimit: true,
+    },
+    {
+        id: 'earthly-win',
+        name: '地胡',
+        nameEn: 'Earthly Win',
+        value: 13,
+        category: 'limit',
+        description: '開局後，閒家食莊家打出的第一隻牌',
+        isLimit: true,
+    },
+    {
+        id: 'human-win',
+        name: '人胡',
+        nameEn: 'Human Win',
+        value: 13,
+        category: 'limit',
+        description: '閒家於開局第一輪即自摸',
+        includes: ['self-draw'],
+        isLimit: true,
+    },
+    {
+        id: 'big-four-winds',
+        name: '大四喜',
+        nameEn: 'Big Four Winds',
+        value: 13,
+        category: 'honors',
+        description: '東、南、西、北四個刻子',
+        includes: ['small-four-winds', 'all-pungs'],
+        incompatibleWith: ['small-four-winds'],
+        isLimit: true,
+    },
+    {
+        id: 'thirteen-orphans',
+        name: '十三么',
+        nameEn: 'Thirteen Orphans',
+        value: 13,
+        category: 'special',
+        description: '集齊六種么九牌及七種字牌，再加其中一張作將',
+        isLimit: true,
+    },
+    {
+        id: 'all-kongs',
+        name: '十八羅漢',
+        nameEn: 'Four Kongs',
+        value: 13,
+        category: 'special',
+        description: '開了四個槓的胡牌牌型',
+        includes: ['all-pungs'],
+        isLimit: true,
+    },
+
+    // ============================================
+    // 新章自訂牌型 (Custom Fan Types)
+    // ============================================
+    {
+        id: 'two-identical-sequences',
+        name: '一般高',
+        nameEn: 'Two Identical Sequences',
+        value: 1,
+        category: 'basic',
+        description: '兩副相同的同門順子',
+        variant: 'custom',
+    },
+    {
+        id: 'two-step-sequences',
+        name: '一般低',
+        nameEn: 'Two Step Sequences',
+        value: 1,
+        category: 'basic',
+        description: '兩副同門的順子，數字遞進1',
+        variant: 'custom',
+    },
+    {
+        id: 'missing-suit',
+        name: '缺一門',
+        nameEn: 'Missing Suit',
+        value: 1,
+        category: 'suits',
+        description: '牌型中缺少一種花色序數牌',
+        variant: 'custom',
+    },
+    {
+        id: 'three-identical-sequences',
+        name: '三般高',
+        nameEn: 'Three Identical Sequences',
+        value: 2,
+        category: 'basic',
+        description: '三副相同的同門順子',
+        variant: 'custom',
+    },
+    {
+        id: 'three-step-sequences',
+        name: '三般低',
+        nameEn: 'Three Step Sequences',
+        value: 2,
+        category: 'basic',
+        description: '三副同門的順子，依次遞進1',
+        variant: 'custom',
+    },
+    {
+        id: 'straight',
+        name: '一條龍',
+        nameEn: 'Straight',
+        value: 2,
+        category: 'suits',
+        description: '擁有同門一至九的牌',
+        variant: 'custom',
+    },
+    {
+        id: 'seven-pairs',
+        name: '七對子',
+        nameEn: 'Seven Pairs',
+        value: 3,
+        category: 'special',
+        description: '取得七個不同將',
+        variant: 'custom',
+    },
+    {
+        id: 'three-kongs',
+        name: '三槓子',
+        nameEn: 'Three Kongs',
+        value: 3,
+        category: 'triplets',
+        description: '槓出三副牌',
+        variant: 'custom',
+    },
+    {
+        id: 'three-wind-pungs',
+        name: '三喜臨門',
+        nameEn: 'Three Wind Pungs',
+        value: 3,
+        category: 'honors',
+        description: '牌型有三個風刻',
+        variant: 'custom',
+    },
+    {
+        id: 'four-identical-sequences',
+        name: '四般高',
+        nameEn: 'Four Identical Sequences',
+        value: 3,
+        category: 'basic',
+        description: '四副相同的同門順子',
+        variant: 'custom',
+    },
+    {
+        id: 'all-green',
+        name: '綠一色',
+        nameEn: 'All Green',
+        value: 13,
+        category: 'special',
+        description: '只有二、三、四、六、八條或發財',
+        variant: 'custom',
+        isLimit: true,
+    },
+    {
+        id: 'all-blue',
+        name: '藍一色',
+        nameEn: 'All Blue',
+        value: 13,
+        category: 'special',
+        description: '只有東、南、西、北、白板或八筒',
+        variant: 'custom',
+        isLimit: true,
+    },
+    {
+        id: 'red-peacock',
+        name: '紅孔雀',
+        nameEn: 'Red Peacock',
+        value: 13,
+        category: 'special',
+        description: '只有一、五、七、九條或紅中',
+        variant: 'custom',
+        isLimit: true,
     },
 ];
+
+// ============================================
+// 計分配置
+// ============================================
+
+export interface ScoringConfig {
+    /** 每底幾分 */
+    baseScore: number;
+    /** 最少幾番先食得糊 */
+    minFan: number;
+    /** 封頂番數 */
+    maxFan: number;
+    /** 起始分數 */
+    startingScore: number;
+    /** 規則變體 */
+    variant: RuleVariant;
+    /** 計分模式：全銃 / 陪銃 */
+    scoringMode: 'full' | 'half';
+}
+
+export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
+    baseScore: 1,
+    minFan: 3,
+    maxFan: 13,
+    startingScore: 500,
+    variant: 'standard',
+    scoringMode: 'full',
+};
 
 // ============================================
 // 計分邏輯
 // ============================================
 
 /**
- * 計算番數對應嘅基本分數
+ * 計算番數對應嘅分數
  * 
- * 公式：底 × 2^(番數-1)
- * 例如：
- * - 3番 = 4 × 2^2 = 16
- * - 5番 = 4 × 2^4 = 64
- * - 10番 = 4 × 2^9 = 2048（但會封頂）
+ * 廣東牌傳統計法（四台滿糊半辣上）：
+ * - 0台: 1
+ * - 1台: 2
+ * - 2台: 4
+ * - 3台: 8
+ * - 4台（滿糊）: 16
+ * - 5台: 24
+ * - 6台: 32
+ * - 7台: 48
+ * - 8台: 64
+ * - 9台: 96
+ * - 10台: 128
+ * - 11台: 192
+ * - 12台: 256
+ * - 13台（爆棚）: 384
+ * 
+ * 簡化版：每台加倍（辣辣計）
  */
 function calculateBasePoints(
     fan: number,
     baseScore: number,
     maxFan: number
 ): number {
-    if (fan <= 0) return 0;
+    if (fan < 0) return 0;
 
     // 套用封頂
     const effectiveFan = Math.min(fan, maxFan);
 
-    // 計算：底 × 2^(番數-1)
-    return baseScore * Math.pow(2, effectiveFan - 1);
+    // 辣辣計：底 × 2^番數
+    return baseScore * Math.pow(2, effectiveFan);
 }
 
 /**
  * 計算選擇咗嘅番種總番數
- * 處理互斥同疊加規則
+ * 處理互斥、包含、暗示規則
  */
 function calculateTotalFan(
     selectedFanIds: string[],
-    fanTypes: FanType[]
+    fanTypes: FanType[],
+    variant: RuleVariant
 ): { totalFan: number; validFans: FanType[] } {
     const validFans: FanType[] = [];
     const includedIds = new Set<string>();
+    const impliedIds = new Set<string>();
 
-    // 先收集所有「已包含」嘅番
+    // Filter by variant
+    const availableFans = fanTypes.filter((f) => {
+        if (!f.variant || f.variant === 'both') return true;
+        return f.variant === variant;
+    });
+
+    // 先收集所有「已包含」同「已暗示」嘅番
     for (const fanId of selectedFanIds) {
-        const fan = fanTypes.find((f) => f.id === fanId);
+        const fan = availableFans.find((f) => f.id === fanId);
         if (fan?.includes) {
             fan.includes.forEach((id) => includedIds.add(id));
+        }
+        if (fan?.impliedBy) {
+            fan.impliedBy.forEach((id) => {
+                if (selectedFanIds.includes(id)) {
+                    impliedIds.add(fan.id);
+                }
+            });
         }
     }
 
     // 計算有效番數
     let totalFan = 0;
     for (const fanId of selectedFanIds) {
-        const fan = fanTypes.find((f) => f.id === fanId);
+        const fan = availableFans.find((f) => f.id === fanId);
         if (!fan) continue;
 
-        // 如果呢個番已經被其他番包含，唔計
-        if (includedIds.has(fan.id)) continue;
+        // 如果呢個番已經被其他番包含或暗示，唔計
+        if (includedIds.has(fan.id) || impliedIds.has(fan.id)) continue;
 
         validFans.push(fan);
         totalFan += fan.value;
@@ -281,19 +628,13 @@ function calculateTotalFan(
 
 /**
  * 廣東牌計分主函數
- * 支援兩種模式：
- * - Pro Mode: 直接輸入番數
- * - Normal Mode: 揀牌型計番
  */
 export function calculateCantoneseScore(
-    params: ScoreCalculationParams
+    params: ScoreCalculationParams,
+    config: ScoringConfig = DEFAULT_SCORING_CONFIG
 ): ScoreResult {
     const { winType, winnerId, loserId, players, dealerId } = params;
-
-    // 基本設定
-    const baseScore = CANTONESE_RULESET.baseScore;
-    const maxFan = CANTONESE_RULESET.maxFan;
-    const minFan = CANTONESE_RULESET.minFan;
+    const { baseScore, maxFan, minFan, variant } = config;
 
     // 搵贏家
     const winner = players.find((p) => p.id === winnerId);
@@ -313,17 +654,16 @@ export function calculateCantoneseScore(
     let fanDescription: string;
 
     if (params.mode === 'pro') {
-        // Pro Mode: 直接用輸入嘅番數
         totalFan = params.fanCount;
         fanDescription = params.description || `${params.fanCount} 番`;
     } else {
-        // Normal Mode: 計算選擇嘅番種
         const { totalFan: calculatedFan, validFans } = calculateTotalFan(
             params.selectedFanIds,
-            CANTONESE_FAN_TYPES
+            CANTONESE_FAN_TYPES,
+            variant
         );
         totalFan = calculatedFan;
-        fanDescription = validFans.map((f) => f.name).join('、') || '雞糊';
+        fanDescription = validFans.map((f) => f.name).join('、') || '屁胡';
     }
 
     // 檢查最低番數
@@ -349,18 +689,14 @@ export function calculateCantoneseScore(
     const changes: ScoreChange[] = [];
 
     if (winType === 'self-draw') {
-        // 自摸：其他三家各自畀錢
-        // 莊家贏：其他人畀雙倍
-        // 莊家輸：畀雙倍
         let totalWinAmount = 0;
 
         for (const player of players) {
             if (player.id === winnerId) continue;
 
-            // 計算呢個玩家要畀幾多
             let payment = basePoints;
 
-            // 如果贏家係莊，或者呢個輸家係莊，加倍
+            // 莊家贏或輸，加倍
             if (isDealerWin || player.id === dealerId) {
                 payment *= 2;
             }
@@ -374,7 +710,6 @@ export function calculateCantoneseScore(
             });
         }
 
-        // 贏家收錢
         changes.push({
             playerId: winnerId,
             delta: totalWinAmount,
@@ -382,7 +717,6 @@ export function calculateCantoneseScore(
         });
 
     } else {
-        // 出銃：出銃者一人畀全部
         if (!loserId) {
             return {
                 totalFan,
@@ -406,15 +740,13 @@ export function calculateCantoneseScore(
             };
         }
 
-        // 計算要畀幾多
         let payment = basePoints;
 
-        // 如果贏家係莊，或者出銃者係莊，加倍
+        // 莊家贏或輸，加倍
         if (isDealerWin || isDealerLose) {
             payment *= 2;
         }
 
-        // 記錄變化
         for (const player of players) {
             if (player.id === winnerId) {
                 changes.push({
@@ -448,8 +780,7 @@ export function calculateCantoneseScore(
 }
 
 /**
- * Pro Mode 專用計分函數（簡化版）
- * 直接輸入番數計分
+ * Pro Mode 專用計分函數
  */
 export function calculateScoreProMode(
     winType: WinType,
@@ -458,7 +789,8 @@ export function calculateScoreProMode(
     fanCount: number,
     players: Player[],
     dealerId: string,
-    description?: string
+    description?: string,
+    config?: ScoringConfig
 ): ScoreResult {
     return calculateCantoneseScore({
         mode: 'pro',
@@ -469,12 +801,11 @@ export function calculateScoreProMode(
         description,
         players,
         dealerId,
-    });
+    }, config);
 }
 
 /**
- * Normal Mode 專用計分函數（簡化版）
- * 揀牌型計番
+ * Normal Mode 專用計分函數
  */
 export function calculateScoreNormalMode(
     winType: WinType,
@@ -482,7 +813,8 @@ export function calculateScoreNormalMode(
     loserId: string | undefined,
     selectedFanIds: string[],
     players: Player[],
-    dealerId: string
+    dealerId: string,
+    config?: ScoringConfig
 ): ScoreResult {
     return calculateCantoneseScore({
         mode: 'normal',
@@ -492,24 +824,21 @@ export function calculateScoreNormalMode(
         selectedFanIds,
         players,
         dealerId,
-    });
+    }, config);
 }
 
 // ============================================
 // RuleSet 定義
 // ============================================
 
-/**
- * 廣東牌規則集
- */
 export const CANTONESE_RULESET: RuleSet = {
     id: 'cantonese',
     name: '廣東牌',
     fanTypes: CANTONESE_FAN_TYPES,
-    baseScore: 4,      // 每底 $4
-    minFan: 3,         // 最少 3 番
-    maxFan: 13,        // 封頂 13 番
-    startingScore: 500, // 起始 $500
+    baseScore: 1,
+    minFan: 3,
+    maxFan: 13,
+    startingScore: 500,
     calculateScore: calculateCantoneseScore,
 };
 
@@ -521,15 +850,20 @@ export const CANTONESE_RULESET: RuleSet = {
  * 按分類取得番種
  */
 export function getFansByCategory(
-    category: FanCategory
+    category: FanCategory,
+    variant: RuleVariant = 'standard'
 ): FanType[] {
-    return CANTONESE_FAN_TYPES.filter((f) => f.category === category);
+    return CANTONESE_FAN_TYPES.filter((f) => {
+        if (f.category !== category) return false;
+        if (!f.variant || f.variant === 'both') return true;
+        return f.variant === variant;
+    });
 }
 
 /**
- * 取得常用番種（用於快速選擇）
+ * 取得常用番種
  */
-export function getCommonFans(): FanType[] {
+export function getCommonFans(variant: RuleVariant = 'standard'): FanType[] {
     const commonIds = [
         'all-chows',
         'all-pungs',
@@ -537,12 +871,38 @@ export function getCommonFans(): FanType[] {
         'full-flush',
         'self-draw',
         'concealed',
+        'dragon-pung',
     ];
-    return CANTONESE_FAN_TYPES.filter((f) => commonIds.includes(f.id));
+    return CANTONESE_FAN_TYPES.filter((f) => {
+        if (!commonIds.includes(f.id)) return false;
+        if (!f.variant || f.variant === 'both') return true;
+        return f.variant === variant;
+    });
 }
 
 /**
- * 檢查番種組合係咪有效（冇互斥）
+ * 取得所有標準番種
+ */
+export function getStandardFans(): FanType[] {
+    return CANTONESE_FAN_TYPES.filter((f) => !f.variant || f.variant === 'both' || f.variant === 'standard');
+}
+
+/**
+ * 取得所有新章番種
+ */
+export function getCustomFans(): FanType[] {
+    return CANTONESE_FAN_TYPES.filter((f) => f.variant === 'custom');
+}
+
+/**
+ * 取得所有例牌
+ */
+export function getLimitFans(): FanType[] {
+    return CANTONESE_FAN_TYPES.filter((f) => f.isLimit);
+}
+
+/**
+ * 檢查番種組合係咪有效
  */
 export function validateFanCombination(
     fanIds: string[]

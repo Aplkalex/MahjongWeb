@@ -65,14 +65,24 @@ export const SEAT_COLORS: Record<SeatIndex, PlayerColor> = {
 // 番種 (Fan Types)
 // ============================================
 
+/**
+ * 規則變體
+ * - standard: 清章（正統牌型）
+ * - custom: 新章（加入自訂牌型）
+ */
+export type RuleVariant = 'standard' | 'custom';
+
 /** 番種分類 */
 export type FanCategory =
-    | 'basic'      // 基本（雞糊、平糊）
-    | 'triplets'   // 刻子相關（對對糊等）
-    | 'suits'      // 花色相關（清一色、混一色）
-    | 'honors'     // 字牌相關（三元、四喜）
-    | 'special'    // 特殊（十三么、七對）
-    | 'situational'; // 情景（自摸、門清、海底等）
+    | 'basic'        // 基本（屁胡、平糊）
+    | 'triplets'     // 刻子相關（對對糊等）
+    | 'suits'        // 花色相關（清一色、混一色）
+    | 'honors'       // 字牌相關（三元、四喜）
+    | 'terminals'    // 么九相關（花么九、清么九）
+    | 'special'      // 特殊（十三么、七對）
+    | 'situational'  // 情景（自摸、門清、海底等）
+    | 'flowers'      // 花牌相關
+    | 'limit';       // 例牌（爆棚）
 
 /** 番種定義 */
 export interface FanType {
@@ -82,16 +92,27 @@ export interface FanType {
     name: string;
     /** 英文名 */
     nameEn: string;
-    /** 番數 */
+    /** 番數（台數） */
     value: number;
     /** 分類 */
     category: FanCategory;
     /** 描述（用於 tooltip） */
     description: string;
+    /** 
+     * 規則變體
+     * - 'standard': 只喺清章有效
+     * - 'custom': 只喺新章有效
+     * - 'both': 兩種都有效（預設）
+     */
+    variant?: 'standard' | 'custom' | 'both';
+    /** 係咪例牌（爆棚） */
+    isLimit?: boolean;
     /** 唔可以同時計嘅番（互斥） */
     incompatibleWith?: string[];
     /** 已經包含嘅番（疊加時唔重複計） */
     includes?: string[];
+    /** 必然伴隨嘅番（唔另計） */
+    impliedBy?: string[];
 }
 
 // ============================================
