@@ -17,11 +17,27 @@ function Dice({ value, rolling }: { value: number; rolling: boolean }) {
     return (
         <motion.div
             animate={rolling ? {
-                rotateX: [0, 360, 720, 1080],
-                rotateY: [0, 180, 360, 540],
-                scale: [1, 1.2, 1, 1.1, 1],
-            } : {}}
-            transition={{ duration: 0.8, ease: "easeOut" }}
+                rotateX: [0, 180, 360, 540, 720, 900, 1080, 1260],
+                rotateY: [0, 90, 270, 450, 630, 720, 810, 900],
+                rotateZ: [0, 45, -30, 60, -45, 30, -15, 0],
+                scale: [1, 1.15, 1.05, 1.2, 1.1, 1.15, 1.08, 1],
+                scaleX: [1, 0.95, 1.05, 0.92, 1.08, 0.98, 1.03, 1],
+                scaleY: [1, 1.08, 0.95, 1.12, 0.92, 1.05, 0.98, 1],
+            } : {
+                scale: 1,
+                scaleX: 1,
+                scaleY: 1,
+            }}
+            transition={rolling ? {
+                duration: 1.2,
+                ease: [0.34, 1.56, 0.64, 1],
+                times: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1],
+            } : {
+                type: "spring",
+                stiffness: 400,
+                damping: 15,
+                mass: 0.8,
+            }}
             className={cn(
                 "w-20 h-20 rounded-2xl bg-gradient-to-br from-white to-gray-200 shadow-xl",
                 "flex items-center justify-center relative",
@@ -41,7 +57,13 @@ function Dice({ value, rolling }: { value: number; rolling: boolean }) {
                             <motion.div
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                transition={{ delay: rolling ? 0.8 : 0, type: "spring" }}
+                                transition={{ 
+                                    delay: rolling ? 1.2 : 0, 
+                                    type: "spring",
+                                    stiffness: 500,
+                                    damping: 10,
+                                    mass: 0.5,
+                                }}
                                 className="w-3.5 h-3.5 rounded-full bg-gray-800 shadow-inner"
                             />
                         )}
@@ -94,7 +116,7 @@ export function DiceTool({ isOpen, onClose }: DiceToolProps) {
             setDice3(final3);
             setRolling(false);
             setHistory(prev => [final1 + final2 + final3, ...prev.slice(0, 9)]);
-        }, 800);
+        }, 1200);
     }, [rolling]);
 
     const total = dice1 + dice2 + dice3;
