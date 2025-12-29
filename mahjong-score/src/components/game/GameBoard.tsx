@@ -3,9 +3,10 @@
 import { useGameStore } from "@/stores/gameStore";
 import { PlayerCard } from "./PlayerCard";
 import { CenterInfo } from "./CenterInfo";
+import { HistoryPanel } from "./HistoryPanel";
 import { WinFlowOverlay } from "@/components/flow/WinFlowOverlay";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
 export function GameBoard() {
@@ -14,6 +15,9 @@ export function GameBoard() {
     const startWinFlow = useGameStore((state) => state.startWinFlow);
     const preferredInputMode = useGameStore((state) => state.preferredInputMode);
     const recordDraw = useGameStore((state) => state.recordDraw);
+    const undoLastRound = useGameStore((state) => state.undoLastRound);
+
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
     // Auto start
     useEffect(() => {
@@ -24,7 +28,8 @@ export function GameBoard() {
 
     if (!game) return null;
 
-    const { players, dealerSeatIndex, roundWind, roundNumber, dealerContinueCount } = game;
+    const { players, dealerSeatIndex, roundWind, roundNumber, dealerContinueCount, history } = game;
+    const canUndo = history.length > 0;
 
     const getWind = (idx: number) => {
         const windIdx = (idx - dealerSeatIndex + 4) % 4;
@@ -35,6 +40,12 @@ export function GameBoard() {
     const handleDraw = () => {
         if (confirm("確定流局？")) {
             recordDraw();
+        }
+    };
+
+    const handleUndo = () => {
+        if (confirm("確定要撤銷上一局嗎？")) {
+            undoLastRound();
         }
     };
 
@@ -84,6 +95,9 @@ export function GameBoard() {
                             dealerCount={dealerContinueCount}
                             onWin={() => startWinFlow(preferredInputMode)}
                             onDraw={handleDraw}
+                            onUndo={handleUndo}
+                            onHistory={() => setIsHistoryOpen(true)}
+                            canUndo={canUndo}
                         />
                     </div>
 
@@ -149,6 +163,10 @@ export function GameBoard() {
             {/* Overlays */}
             <WinFlowOverlay />
             <SettingsPanel />
+            <HistoryPanel 
+                isOpen={isHistoryOpen} 
+                onClose={() => setIsHistoryOpen(false)} 
+            />
         </div>
     );
 }

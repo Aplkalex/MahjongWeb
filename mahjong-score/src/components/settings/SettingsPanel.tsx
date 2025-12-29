@@ -4,8 +4,8 @@ import { useGameStore } from "@/stores/gameStore";
 import { KnobControl } from "@/components/ui/KnobControl";
 import { MotionButton } from "@/components/ui/MotionButton";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
-import { Settings, X, RotateCcw } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Settings, X, RotateCcw, Edit2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -14,13 +14,90 @@ const PRESETS = [
     { label: "一二蚊", baseScore: 1 },
 ];
 
+const WIND_LABELS = ["東", "南", "西", "北"];
+
+function PlayerNameEditor({ 
+    index, 
+    name, 
+    onChange 
+}: { 
+    index: number; 
+    name: string; 
+    onChange: (name: string) => void;
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempName, setTempName] = useState(name);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (tempName.trim()) {
+            onChange(tempName.trim());
+        } else {
+            setTempName(name);
+        }
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="glass-card p-3 flex items-center gap-3">
+            <div className={cn("wind-badge", `wind-${['east', 'south', 'west', 'north'][index]}`)}>
+                {WIND_LABELS[index]}
+            </div>
+            {isEditing ? (
+                <div className="flex-1 flex items-center gap-2">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={tempName}
+                        onChange={(e) => setTempName(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSave();
+                            if (e.key === 'Escape') {
+                                setTempName(name);
+                                setIsEditing(false);
+                            }
+                        }}
+                        onBlur={handleSave}
+                        className="flex-1 bg-white/10 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary"
+                        maxLength={10}
+                    />
+                    <button
+                        onClick={handleSave}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-primary"
+                    >
+                        <Check size={16} />
+                    </button>
+                </div>
+            ) : (
+                <div className="flex-1 flex items-center justify-between">
+                    <span className="font-medium">{name}</span>
+                    <button
+                        onClick={() => setIsEditing(true)}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <Edit2 size={14} />
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function SettingsPanel() {
     const [isOpen, setIsOpen] = useState(false);
     const settings = useGameStore(state => state.settings);
     const updateSettings = useGameStore(state => state.updateSettings);
+    const updatePlayerName = useGameStore(state => state.updatePlayerName);
     const resetGame = useGameStore(state => state.resetGame);
 
-    const { scoringConfig } = settings;
+    const { scoringConfig, playerNames } = settings;
 
     const handleMaxFanChange = (value: number) => {
         updateSettings({
@@ -47,6 +124,10 @@ export function SettingsPanel() {
                 paymentMode: mode
             }
         });
+    };
+
+    const handlePlayerNameChange = (index: number, name: string) => {
+        updatePlayerName(index as 0 | 1 | 2 | 3, name);
     };
 
     return (
@@ -90,6 +171,23 @@ export function SettingsPanel() {
                                 </button>
                             </div>
 
+                            {/* Player Names */}
+                            <div className="mb-8">
+                                <h3 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wider">
+                                    玩家名稱
+                                </h3>
+                                <div className="space-y-2">
+                                    {playerNames.map((name, index) => (
+                                        <PlayerNameEditor
+                                            key={index}
+                                            index={index}
+                                            name={name}
+                                            onChange={(newName) => handlePlayerNameChange(index, newName)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Max Fan */}
                             <div className="mb-8">
                                 <h3 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wider">
@@ -101,7 +199,7 @@ export function SettingsPanel() {
                                         onChange={handleMaxFanChange}
                                         min={8}
                                         max={18}
-                                        size={140}
+                                        size={220}
                                     />
                                 </div>
                             </div>

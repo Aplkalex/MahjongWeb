@@ -3,11 +3,11 @@
 import { useGameStore } from "@/stores/gameStore";
 import { KnobControl } from "@/components/ui/KnobControl";
 import { MotionButton } from "@/components/ui/MotionButton";
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Player } from "@/lib/engine/types";
+import { Player, ScoreResult } from "@/lib/engine/types";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Check, Hand, Users, Zap } from "lucide-react";
+import { ArrowLeft, Check, Hand, Users, Zap, TrendingUp, TrendingDown } from "lucide-react";
 import { calculateCantoneseScore } from "@/lib/engine/cantonese";
 
 type WinStep = 'select-winner' | 'win-type' | 'select-discarder' | 'input-fan' | 'confirm';
@@ -56,6 +56,27 @@ export function WinFlowOverlay() {
 
     const { players, dealerSeatIndex } = game;
     const maxFan = settings.scoringConfig.maxFan;
+
+    // Calculate preview result
+    const previewResult = useMemo<ScoreResult | null>(() => {
+        if (!winnerId) return null;
+        const effectiveFan = Math.min(fan, maxFan);
+        const dealerId = players[dealerSeatIndex].id;
+        
+        try {
+            return calculateCantoneseScore({
+                mode: 'pro',
+                winType: isSelfDraw ? 'self-draw' : 'discard',
+                winnerId: winnerId,
+                loserId: isSelfDraw ? undefined : discarderId || undefined,
+                fanCount: effectiveFan,
+                players,
+                dealerId,
+            }, settings.scoringConfig);
+        } catch {
+            return null;
+        }
+    }, [winnerId, fan, maxFan, isSelfDraw, discarderId, players, dealerSeatIndex, settings.scoringConfig]);
 
     const goNext = (nextStep: WinStep) => {
         setDirection(1);
@@ -339,6 +360,22 @@ export function WinFlowOverlay() {
                                         min={0}
                                         max={18}
                                     />
+                                    
+                                    {/* Quick preview of winner's gain */}
+                                    {previewResult && (
+                                        <motion.div
+                                            key={previewResult.changes.find(c => c.delta > 0)?.delta}
+                                            initial={{ scale: 0.9, opacity: 0 }}
+                                            animate={{ scale: 1, opacity: 1 }}
+                                            className="text-center"
+                                        >
+                                            <span className="text-muted-foreground text-sm">贏家獲得 </span>
+                                            <span className="text-green-400 font-bold text-lg font-mono">
+                                                +{previewResult.changes.find(c => c.delta > 0)?.delta || 0}
+                                            </span>
+                                        </motion.div>
+                                    )}
+                                    
                                     {fan >= maxFan && (
                                         <motion.div
                                             initial={{ scale: 0.8, opacity: 0 }}
@@ -369,20 +406,78 @@ export function WinFlowOverlay() {
                                     animate="center"
                                     exit="exit"
                                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                    className="flex flex-col items-center gap-4"
+                                    className="flex flex-col items-center gap-3"
                                 >
-                                    <div className="glass-card p-5 w-full text-center">
-                                        <div className="text-sm text-muted-foreground mb-1">贏家</div>
-                                        <div className="text-xl font-bold">{winner?.name}</div>
-                                    </div>
-                                    <div className="glass-card p-5 w-full text-center">
-                                        <div className="text-sm text-muted-foreground mb-1">
-                                            {isSelfDraw ? '自摸' : '出銃'}
+                                    {/* Winner & Fan Summary */}
+                                    <div className="glass-card p-4 w-full">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="text-xs text-muted-foreground">贏家</div>
+                                                <div className="text-lg font-bold">{winner?.name}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-xs text-muted-foreground">
+                                                    {isSelfDraw ? '自摸' : '出銃'}
+                                                </div>
+                                                <div className={cn(
+                                                    "text-2xl font-bold",
+                                                    fan >= maxFan ? "text-primary" : "text-secondary"
+                                                )}>
+                                                    {Math.min(fan, maxFan)}番
+                                                    {fan >= maxFan && <span className="text-sm ml-1">爆棚</span>}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="text-3xl font-bold text-primary">
-                                            {Math.min(fan, maxFan)} 番
-                                        </div>
                                     </div>
+
+                                    {/* Score Breakdown */}
+                                    {previewResult && (
+                                        <div className="glass-card p-4 w-full">
+                                            <div className="text-xs text-muted-foreground mb-3 uppercase tracking-wider">
+                                                分數變化
+                                            </div>
+                                            <div className="space-y-2">
+                                                {previewResult.changes.map((change) => {
+                                                    const player = players.find(p => p.id === change.playerId);
+                                                    const isWinner = change.delta > 0;
+                                                    const isLoser = change.delta < 0;
+                                                    return (
+                                                        <motion.div
+                                                            key={change.playerId}
+                                                            initial={{ opacity: 0, x: -10 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            className="flex items-center justify-between"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                {isWinner && <TrendingUp size={14} className="text-green-400" />}
+                                                                {isLoser && <TrendingDown size={14} className="text-red-400" />}
+                                                                <span className={cn(
+                                                                    "font-medium",
+                                                                    isWinner && "text-green-400",
+                                                                    isLoser && "text-red-400"
+                                                                )}>
+                                                                    {player?.name}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className={cn(
+                                                                    "font-mono font-bold",
+                                                                    isWinner && "text-green-400",
+                                                                    isLoser && "text-red-400"
+                                                                )}>
+                                                                    {change.delta > 0 ? '+' : ''}{change.delta}
+                                                                </span>
+                                                                <span className="text-muted-foreground text-sm font-mono">
+                                                                    → {change.newScore}
+                                                                </span>
+                                                            </div>
+                                                        </motion.div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <MotionButton
                                         variant="secondary"
                                         size="lg"

@@ -117,6 +117,9 @@ interface GameStore {
     /** 更新設定 */
     updateSettings: (settings: Partial<GameSettings>) => void;
 
+    /** 更新玩家名稱（唔會 reset 遊戲） */
+    updatePlayerName: (seatIndex: SeatIndex, name: string) => void;
+
     // ============================================
     // Computed / Helpers
     // ============================================
@@ -419,6 +422,30 @@ export const useGameStore = create<GameStore>()(
                 set({
                     settings: { ...get().settings, ...updates },
                 });
+            },
+
+            updatePlayerName: (seatIndex, name) => {
+                const { game, settings } = get();
+                
+                // Update settings
+                const newNames = [...settings.playerNames] as [string, string, string, string];
+                newNames[seatIndex] = name;
+                
+                // Update game if exists
+                if (game) {
+                    const updatedPlayers = game.players.map((p, i) => 
+                        i === seatIndex ? { ...p, name } : p
+                    ) as typeof game.players;
+                    
+                    set({
+                        settings: { ...settings, playerNames: newNames },
+                        game: { ...game, players: updatedPlayers, updatedAt: Date.now() },
+                    });
+                } else {
+                    set({
+                        settings: { ...settings, playerNames: newNames },
+                    });
+                }
             },
 
             // ============================================

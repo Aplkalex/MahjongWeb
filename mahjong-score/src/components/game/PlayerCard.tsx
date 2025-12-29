@@ -1,9 +1,11 @@
 "use client";
 
-import { Player } from "@/lib/engine/types";
+import { Player, SeatIndex } from "@/lib/engine/types";
 import { cn } from "@/lib/utils";
-import { motion, useSpring, useTransform, MotionValue } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, useSpring, AnimatePresence } from "framer-motion";
+import { useEffect, useState, useRef } from "react";
+import { useGameStore } from "@/stores/gameStore";
+import { Edit2, Check } from "lucide-react";
 
 interface PlayerCardProps {
     player: Player;
@@ -24,13 +26,96 @@ const WIND_LABELS: Record<string, string> = {
 function AnimatedScore({ value }: { value: number }) {
     const spring = useSpring(value, { stiffness: 100, damping: 30 });
     const [display, setDisplay] = useState(value);
+    const [flash, setFlash] = useState<'up' | 'down' | null>(null);
+    const prevValue = useRef(value);
 
     useEffect(() => {
+        if (value !== prevValue.current) {
+            setFlash(value > prevValue.current ? 'up' : 'down');
+            setTimeout(() => setFlash(null), 800);
+            prevValue.current = value;
+        }
         spring.set(value);
         return spring.on("change", (v) => setDisplay(Math.round(v)));
     }, [value, spring]);
 
-    return <span>{display}</span>;
+    return (
+        <span className={cn(
+            "transition-colors duration-300",
+            flash === 'up' && "text-green-400",
+            flash === 'down' && "text-red-400"
+        )}>
+            {display}
+        </span>
+    );
+}
+
+function EditableName({ 
+    player, 
+    seatIndex 
+}: { 
+    player: Player; 
+    seatIndex: SeatIndex;
+}) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempName, setTempName] = useState(player.name);
+    const updatePlayerName = useGameStore(state => state.updatePlayerName);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleSave = () => {
+        if (tempName.trim() && tempName !== player.name) {
+            updatePlayerName(seatIndex, tempName.trim());
+        } else {
+            setTempName(player.name);
+        }
+        setIsEditing(false);
+    };
+
+    if (isEditing) {
+        return (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSave();
+                        if (e.key === 'Escape') {
+                            setTempName(player.name);
+                            setIsEditing(false);
+                        }
+                    }}
+                    onBlur={handleSave}
+                    className="w-20 bg-white/10 rounded px-2 py-0.5 text-sm outline-none focus:ring-1 focus:ring-primary text-center"
+                    maxLength={10}
+                />
+                <button onClick={handleSave} className="p-1 hover:bg-white/10 rounded">
+                    <Check size={12} />
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <button
+            onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+            }}
+            className="group flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+            <span className="truncate max-w-[100px]">{player.name}</span>
+            <Edit2 size={10} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+        </button>
+    );
 }
 
 export function PlayerCard({
@@ -69,10 +154,8 @@ export function PlayerCard({
 
             {/* Content */}
             <div className="flex flex-col items-center pt-6 gap-2">
-                {/* Name */}
-                <span className="text-sm font-medium text-muted-foreground truncate max-w-[120px]">
-                    {player.name}
-                </span>
+                {/* Name (Editable) */}
+                <EditableName player={player} seatIndex={player.seatIndex} />
 
                 {/* Score */}
                 <div className="score-text tabular-nums">
@@ -80,11 +163,18 @@ export function PlayerCard({
                 </div>
 
                 {/* Dealer Label */}
-                {isDealer && (
-                    <span className="text-xs font-bold text-[hsl(43,96%,56%)] uppercase tracking-wider">
-                        莊家
-                    </span>
-                )}
+                <AnimatePresence>
+                    {isDealer && (
+                        <motion.span
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className="text-xs font-bold text-[hsl(43,96%,56%)] uppercase tracking-wider"
+                        >
+                            莊家
+                        </motion.span>
+                    )}
+                </AnimatePresence>
             </div>
         </motion.div>
     );
