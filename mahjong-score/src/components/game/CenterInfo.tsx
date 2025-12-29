@@ -1,7 +1,7 @@
 "use client";
 
 import { MotionButton } from "@/components/ui/MotionButton";
-import { MinusCircle, Trophy, Undo2, History } from "lucide-react";
+import { MinusCircle, Trophy, Undo2, History, Dices, CircleDot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface CenterInfoProps {
@@ -12,6 +12,8 @@ interface CenterInfoProps {
     onDraw: () => void;
     onUndo?: () => void;
     onHistory?: () => void;
+    onDice?: () => void;
+    onProgress?: () => void;
     canUndo?: boolean;
 }
 
@@ -30,6 +32,8 @@ export function CenterInfo({
     onDraw,
     onUndo,
     onHistory,
+    onDice,
+    onProgress,
     canUndo = false,
 }: CenterInfoProps) {
     return (
@@ -39,8 +43,11 @@ export function CenterInfo({
             transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
             className="flex flex-col items-center gap-4"
         >
-            {/* Compact Round Display */}
-            <div className="glass-card px-6 py-3 text-center">
+            {/* Compact Round Display - Clickable for Progress */}
+            <button 
+                onClick={onProgress}
+                className="glass-card px-6 py-3 text-center cursor-pointer hover:bg-white/10 transition-colors"
+            >
                 <div className="flex items-center gap-3">
                     <span className="text-3xl font-bold text-primary">
                         {WIND_LABELS[roundWind]}
@@ -62,7 +69,7 @@ export function CenterInfo({
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
+            </button>
 
             {/* Main Action Buttons */}
             <div className="flex items-center gap-3">
@@ -116,6 +123,17 @@ export function CenterInfo({
                     >
                         <History size={16} />
                         記錄
+                    </MotionButton>
+                )}
+                {onDice && (
+                    <MotionButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={onDice}
+                        className="gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                        <Dices size={16} />
+                        骰仔
                     </MotionButton>
                 )}
             </div>

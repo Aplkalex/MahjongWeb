@@ -4,10 +4,14 @@ import { useGameStore } from "@/stores/gameStore";
 import { PlayerCard } from "./PlayerCard";
 import { CenterInfo } from "./CenterInfo";
 import { HistoryPanel } from "./HistoryPanel";
+import { WindProgress } from "./WindProgress";
 import { WinFlowOverlay } from "@/components/flow/WinFlowOverlay";
 import { SettingsPanel } from "@/components/settings/SettingsPanel";
+import { GameSetupFlow } from "@/components/setup/GameSetupFlow";
+import { DiceTool } from "@/components/tools/DiceTool";
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { Dices, BarChart3 } from "lucide-react";
 
 export function GameBoard() {
     const game = useGameStore((state) => state.game);
@@ -18,15 +22,43 @@ export function GameBoard() {
     const undoLastRound = useGameStore((state) => state.undoLastRound);
 
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [isSetupOpen, setIsSetupOpen] = useState(false);
+    const [isDiceOpen, setIsDiceOpen] = useState(false);
+    const [isProgressOpen, setIsProgressOpen] = useState(false);
 
-    // Auto start
+    // Show setup on first load if no game
     useEffect(() => {
+        if (!game) {
+            setIsSetupOpen(true);
+        }
+    }, []);
+
+    // Fallback start game if setup cancelled
+    const handleSetupCancel = () => {
         if (!game) {
             startGame();
         }
-    }, [game, startGame]);
+        setIsSetupOpen(false);
+    };
 
-    if (!game) return null;
+    if (!game) {
+        return (
+            <>
+                <div className="min-h-[100dvh] w-full bg-background flex items-center justify-center">
+                    <div className="text-muted-foreground">載入中...</div>
+                </div>
+                <AnimatePresence>
+                    {isSetupOpen && (
+                        <GameSetupFlow
+                            isOpen={isSetupOpen}
+                            onComplete={() => setIsSetupOpen(false)}
+                            onCancel={handleSetupCancel}
+                        />
+                    )}
+                </AnimatePresence>
+            </>
+        );
+    }
 
     const { players, dealerSeatIndex, roundWind, roundNumber, dealerContinueCount, history } = game;
     const canUndo = history.length > 0;
@@ -98,6 +130,8 @@ export function GameBoard() {
                             onUndo={handleUndo}
                             onHistory={() => setIsHistoryOpen(true)}
                             canUndo={canUndo}
+                            onDice={() => setIsDiceOpen(true)}
+                            onProgress={() => setIsProgressOpen(true)}
                         />
                     </div>
 
@@ -167,6 +201,70 @@ export function GameBoard() {
                 isOpen={isHistoryOpen} 
                 onClose={() => setIsHistoryOpen(false)} 
             />
+            
+            {/* Setup Flow */}
+            <AnimatePresence>
+                {isSetupOpen && (
+                    <GameSetupFlow
+                        isOpen={isSetupOpen}
+                        onComplete={() => setIsSetupOpen(false)}
+                        onCancel={handleSetupCancel}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Dice Tool Modal */}
+            <AnimatePresence>
+                {isDiceOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                        onClick={() => setIsDiceOpen(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <DiceTool isOpen={isDiceOpen} onClose={() => setIsDiceOpen(false)} />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Wind Progress Modal */}
+            <AnimatePresence>
+                {isProgressOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                        onClick={() => setIsProgressOpen(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-card/80 backdrop-blur-xl rounded-3xl border border-white/10 p-8"
+                        >
+                            <WindProgress 
+                                roundWind={roundWind} 
+                                roundNumber={roundNumber}
+                                subRound={dealerContinueCount}
+                                size={200}
+                            />
+                            <div className="text-center mt-4 text-muted-foreground text-sm">
+                                點擊任意處關閉
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
