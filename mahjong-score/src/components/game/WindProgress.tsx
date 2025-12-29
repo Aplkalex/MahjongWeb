@@ -124,8 +124,8 @@ export function WindProgress({
                                 color: isCurrent || isCompleted 
                                     ? WIND_COLORS[wind] 
                                     : 'var(--muted-foreground)',
-                                borderColor: isCurrent ? WIND_COLORS[wind] : 'transparent',
-                                ringColor: isCurrent ? WIND_COLORS[wind] : 'transparent',
+                                // @ts-expect-error CSS custom property for ring color
+                                '--tw-ring-color': isCurrent ? WIND_COLORS[wind] : 'transparent',
                             }}
                         >
                             {WIND_NAMES[wind]}風

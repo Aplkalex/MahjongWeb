@@ -253,10 +253,9 @@ export function GameBoard() {
                             className="bg-card/80 backdrop-blur-xl rounded-3xl border border-white/10 p-8"
                         >
                             <WindProgress 
-                                roundWind={roundWind} 
+                                currentWind={roundWind} 
                                 roundNumber={roundNumber}
-                                subRound={dealerContinueCount}
-                                size={200}
+                                dealerSeatIndex={dealerSeatIndex}
                             />
                             <div className="text-center mt-4 text-muted-foreground text-sm">
                                 點擊任意處關閉
