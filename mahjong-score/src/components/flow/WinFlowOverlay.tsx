@@ -131,11 +131,19 @@ export function WinFlowOverlay() {
     const winner = players.find(p => p.id === winnerId);
 
     const handleBackdropPointerDown = (e: React.PointerEvent) => {
-        setIsPointerDown(true);
-        pointerDownPos.current = { x: e.clientX, y: e.clientY };
+        // Only track if clicking directly on backdrop, not on children
+        if (e.target === e.currentTarget) {
+            setIsPointerDown(true);
+            pointerDownPos.current = { x: e.clientX, y: e.clientY };
+        }
     };
 
     const handleBackdropPointerUp = (e: React.PointerEvent) => {
+        // Only close if clicking directly on backdrop
+        if (e.target !== e.currentTarget) {
+            return;
+        }
+
         if (!isPointerDown || !pointerDownPos.current) {
             setIsPointerDown(false);
             return;
@@ -170,8 +178,6 @@ export function WinFlowOverlay() {
                     exit={{ scale: 0.9, opacity: 0 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     className="glass-card w-full max-w-md p-6 overflow-hidden"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onPointerUp={(e) => e.stopPropagation()}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-6">
