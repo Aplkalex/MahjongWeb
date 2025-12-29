@@ -117,12 +117,12 @@ describe('DiceTool Component', () => {
         const rollButton = screen.getByRole('button', { name: /擲骰仔/i });
         fireEvent.click(rollButton);
         
-        // Check button is disabled by checking for disabled attribute
-        expect(rollButton.hasAttribute('disabled')).toBe(true);
+        // Check button is disabled
+        expect(rollButton).toBeDisabled();
         
         // Wait for roll to complete
         await waitFor(() => {
-            expect(rollButton.hasAttribute('disabled')).toBe(false);
+            expect(rollButton).not.toBeDisabled();
         }, { timeout: 2000 });
     });
 });
