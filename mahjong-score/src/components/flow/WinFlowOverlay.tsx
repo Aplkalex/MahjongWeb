@@ -3,14 +3,15 @@
 import { useGameStore } from "@/stores/gameStore";
 import { KnobControl } from "@/components/ui/KnobControl";
 import { MotionButton } from "@/components/ui/MotionButton";
-import { useState, useRef, useMemo } from "react";
+import { FanSelector } from "./FanSelector";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Player, ScoreResult } from "@/lib/engine/types";
+import { Player, ScoreResult, InputMode } from "@/lib/engine/types";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Check, Hand, Users, Zap, TrendingUp, TrendingDown } from "lucide-react";
-import { calculateCantoneseScore } from "@/lib/engine/cantonese";
+import { ArrowLeft, Check, Hand, Users, Zap, TrendingUp, TrendingDown, List, Gauge } from "lucide-react";
+import { calculateCantoneseScore, CANTONESE_FAN_TYPES } from "@/lib/engine/cantonese";
 
-type WinStep = 'select-winner' | 'win-type' | 'select-discarder' | 'input-fan' | 'confirm';
+type WinStep = 'select-winner' | 'win-type' | 'select-discarder' | 'input-fan' | 'select-fans' | 'confirm';
 
 const WIND_LABELS: Record<string, string> = {
     east: "東",
@@ -40,6 +41,7 @@ export function WinFlowOverlay() {
     const game = useGameStore(state => state.game);
     const settings = useGameStore(state => state.settings);
     const recordWin = useGameStore(state => state.recordWin);
+    const preferredInputMode = useGameStore(state => state.preferredInputMode);
 
     const [step, setStep] = useState<WinStep>('select-winner');
     const [direction, setDirection] = useState(0);
@@ -47,36 +49,61 @@ export function WinFlowOverlay() {
     const [isSelfDraw, setIsSelfDraw] = useState(true);
     const [discarderId, setDiscarderId] = useState<string | null>(null);
     const [fan, setFan] = useState(3);
+    const [selectedFanIds, setSelectedFanIds] = useState<string[]>([]);
+    
+    // Current mode - from winFlow or preferred
+    const currentMode: InputMode = winFlow?.mode || preferredInputMode;
 
     // Track if this is a real click vs a drag release (must be before early return)
     const [isPointerDown, setIsPointerDown] = useState(false);
     const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+
+    // Calculate total fan from selected fans (for normal mode)
+    const normalModeFan = useMemo(() => {
+        return selectedFanIds.reduce((sum, id) => {
+            const fanType = CANTONESE_FAN_TYPES.find(f => f.id === id);
+            return sum + (fanType?.value || 0);
+        }, 0);
+    }, [selectedFanIds]);
 
     if (!winFlow || !game) return null;
 
     const { players, dealerSeatIndex } = game;
     const maxFan = settings.scoringConfig.maxFan;
 
-    // Calculate preview result
+    // Calculate preview result based on mode
     const previewResult = useMemo<ScoreResult | null>(() => {
         if (!winnerId) return null;
-        const effectiveFan = Math.min(fan, maxFan);
         const dealerId = players[dealerSeatIndex].id;
         
         try {
-            return calculateCantoneseScore({
-                mode: 'pro',
-                winType: isSelfDraw ? 'self-draw' : 'discard',
-                winnerId: winnerId,
-                loserId: isSelfDraw ? undefined : discarderId || undefined,
-                fanCount: effectiveFan,
-                players,
-                dealerId,
-            }, settings.scoringConfig);
+            if (currentMode === 'pro') {
+                const effectiveFan = Math.min(fan, maxFan);
+                return calculateCantoneseScore({
+                    mode: 'pro',
+                    winType: isSelfDraw ? 'self-draw' : 'discard',
+                    winnerId: winnerId,
+                    loserId: isSelfDraw ? undefined : discarderId || undefined,
+                    fanCount: effectiveFan,
+                    players,
+                    dealerId,
+                }, settings.scoringConfig);
+            } else {
+                // Normal mode - calculate from selected fans
+                return calculateCantoneseScore({
+                    mode: 'normal',
+                    winType: isSelfDraw ? 'self-draw' : 'discard',
+                    winnerId: winnerId,
+                    loserId: isSelfDraw ? undefined : discarderId || undefined,
+                    selectedFanIds: selectedFanIds,
+                    players,
+                    dealerId,
+                }, settings.scoringConfig);
+            }
         } catch {
             return null;
         }
-    }, [winnerId, fan, maxFan, isSelfDraw, discarderId, players, dealerSeatIndex, settings.scoringConfig]);
+    }, [winnerId, fan, maxFan, isSelfDraw, discarderId, players, dealerSeatIndex, settings.scoringConfig, currentMode, selectedFanIds]);
 
     const goNext = (nextStep: WinStep) => {
         setDirection(1);
@@ -96,7 +123,8 @@ export function WinFlowOverlay() {
     const handleWinType = (selfDraw: boolean) => {
         setIsSelfDraw(selfDraw);
         if (selfDraw) {
-            goNext('input-fan');
+            // Go to input step based on mode
+            goNext(currentMode === 'pro' ? 'input-fan' : 'select-fans');
         } else {
             goNext('select-discarder');
         }
@@ -104,27 +132,53 @@ export function WinFlowOverlay() {
 
     const handleSelectDiscarder = (playerId: string) => {
         setDiscarderId(playerId);
-        goNext('input-fan');
+        // Go to input step based on mode
+        goNext(currentMode === 'pro' ? 'input-fan' : 'select-fans');
     };
+
+    const handleFanSelectionChange = useCallback((fanIds: string[]) => {
+        setSelectedFanIds(fanIds);
+    }, []);
 
     const handleConfirm = () => {
         const winnerIdx = players.findIndex(p => p.id === winnerId);
-        const effectiveFan = Math.min(fan, maxFan);
         const dealerId = players[dealerSeatIndex].id;
 
-        // Calculate score using the engine
-        const result = calculateCantoneseScore({
-            mode: 'pro',
-            winType: isSelfDraw ? 'self-draw' : 'discard',
-            winnerId: winnerId!,
-            loserId: isSelfDraw ? undefined : discarderId!,
-            fanCount: effectiveFan,
-            players,
-            dealerId,
-        }, settings.scoringConfig);
+        let result: ScoreResult;
+        let description: string;
+
+        if (currentMode === 'pro') {
+            const effectiveFan = Math.min(fan, maxFan);
+            result = calculateCantoneseScore({
+                mode: 'pro',
+                winType: isSelfDraw ? 'self-draw' : 'discard',
+                winnerId: winnerId!,
+                loserId: isSelfDraw ? undefined : discarderId!,
+                fanCount: effectiveFan,
+                players,
+                dealerId,
+            }, settings.scoringConfig);
+            description = `${players[winnerIdx].name} ${isSelfDraw ? '自摸' : '出銃'} ${effectiveFan}番`;
+        } else {
+            result = calculateCantoneseScore({
+                mode: 'normal',
+                winType: isSelfDraw ? 'self-draw' : 'discard',
+                winnerId: winnerId!,
+                loserId: isSelfDraw ? undefined : discarderId!,
+                selectedFanIds: selectedFanIds,
+                players,
+                dealerId,
+            }, settings.scoringConfig);
+            // Build description from selected fans
+            const fanNames = selectedFanIds
+                .map(id => CANTONESE_FAN_TYPES.find(f => f.id === id)?.name)
+                .filter(Boolean)
+                .slice(0, 3)
+                .join('、');
+            description = `${players[winnerIdx].name} ${isSelfDraw ? '自摸' : '出銃'} ${result.totalFan}番 (${fanNames}${selectedFanIds.length > 3 ? '...' : ''})`;
+        }
 
         // Record the win with the calculated result
-        const description = `${players[winnerIdx].name} ${isSelfDraw ? '自摸' : '出銃'} ${effectiveFan}番`;
         recordWin(result, description);
 
         // Reset and close
@@ -132,6 +186,7 @@ export function WinFlowOverlay() {
         setWinnerId(null);
         setDiscarderId(null);
         setFan(3);
+        setSelectedFanIds([]);
         cancelWinFlow();
     };
 
@@ -140,6 +195,7 @@ export function WinFlowOverlay() {
         setWinnerId(null);
         setDiscarderId(null);
         setFan(3);
+        setSelectedFanIds([]);
         cancelWinFlow();
     };
 
@@ -208,7 +264,8 @@ export function WinFlowOverlay() {
                                     if (step === 'win-type') goBack('select-winner');
                                     else if (step === 'select-discarder') goBack('win-type');
                                     else if (step === 'input-fan') goBack(isSelfDraw ? 'win-type' : 'select-discarder');
-                                    else if (step === 'confirm') goBack('input-fan');
+                                    else if (step === 'select-fans') goBack(isSelfDraw ? 'win-type' : 'select-discarder');
+                                    else if (step === 'confirm') goBack(currentMode === 'pro' ? 'input-fan' : 'select-fans');
                                 }}
                                 className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             >
@@ -220,6 +277,7 @@ export function WinFlowOverlay() {
                             {step === 'win-type' && '自摸定出銃？'}
                             {step === 'select-discarder' && '邊個出銃？'}
                             {step === 'input-fan' && '幾多番？'}
+                            {step === 'select-fans' && '揀牌型'}
                             {step === 'confirm' && '確認'}
                         </h2>
                         <div className="w-9" /> {/* Spacer */}
@@ -396,6 +454,57 @@ export function WinFlowOverlay() {
                                 </motion.div>
                             )}
 
+                            {/* Step 4b: Select Fans (Normal Mode) */}
+                            {step === 'select-fans' && (
+                                <motion.div
+                                    key="select-fans"
+                                    custom={direction}
+                                    variants={slideVariants}
+                                    initial="enter"
+                                    animate="center"
+                                    exit="exit"
+                                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                    className="flex flex-col gap-4"
+                                >
+                                    <FanSelector
+                                        selectedFanIds={selectedFanIds}
+                                        onSelectionChange={handleFanSelectionChange}
+                                    />
+                                    
+                                    {/* Preview section */}
+                                    <div className="glass-card p-3 flex items-center justify-between">
+                                        <div>
+                                            <div className="text-xs text-muted-foreground">總番數</div>
+                                            <div className={cn(
+                                                "text-xl font-bold",
+                                                normalModeFan >= maxFan ? "text-primary" : "text-secondary"
+                                            )}>
+                                                {Math.min(normalModeFan, maxFan)}番
+                                                {normalModeFan >= maxFan && <span className="text-xs ml-1">爆棚</span>}
+                                            </div>
+                                        </div>
+                                        {previewResult && (
+                                            <div className="text-right">
+                                                <div className="text-xs text-muted-foreground">贏家獲得</div>
+                                                <div className="text-green-400 font-bold text-lg font-mono">
+                                                    +{previewResult.changes.find(c => c.delta > 0)?.delta || 0}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <MotionButton
+                                        variant="primary"
+                                        size="lg"
+                                        onClick={() => goNext('confirm')}
+                                        className="w-full"
+                                        disabled={selectedFanIds.length === 0}
+                                    >
+                                        下一步
+                                    </MotionButton>
+                                </motion.div>
+                            )}
+
                             {/* Step 5: Confirm */}
                             {step === 'confirm' && (
                                 <motion.div
@@ -421,13 +530,29 @@ export function WinFlowOverlay() {
                                                 </div>
                                                 <div className={cn(
                                                     "text-2xl font-bold",
-                                                    fan >= maxFan ? "text-primary" : "text-secondary"
+                                                    (currentMode === 'pro' ? fan : normalModeFan) >= maxFan ? "text-primary" : "text-secondary"
                                                 )}>
-                                                    {Math.min(fan, maxFan)}番
-                                                    {fan >= maxFan && <span className="text-sm ml-1">爆棚</span>}
+                                                    {Math.min(currentMode === 'pro' ? fan : normalModeFan, maxFan)}番
+                                                    {(currentMode === 'pro' ? fan : normalModeFan) >= maxFan && <span className="text-sm ml-1">爆棚</span>}
                                                 </div>
                                             </div>
                                         </div>
+                                        {/* Show selected fans in normal mode */}
+                                        {currentMode === 'normal' && selectedFanIds.length > 0 && (
+                                            <div className="mt-3 pt-3 border-t border-white/10">
+                                                <div className="text-xs text-muted-foreground mb-2">牌型</div>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {selectedFanIds.map(id => {
+                                                        const fanType = CANTONESE_FAN_TYPES.find(f => f.id === id);
+                                                        return fanType ? (
+                                                            <span key={id} className="px-2 py-0.5 text-xs rounded-full bg-primary/20 text-primary">
+                                                                {fanType.name}
+                                                            </span>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Score Breakdown */}

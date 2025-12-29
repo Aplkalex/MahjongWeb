@@ -5,7 +5,7 @@ import { KnobControl } from "@/components/ui/KnobControl";
 import { MotionButton } from "@/components/ui/MotionButton";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
-import { Settings, X, RotateCcw, Edit2, Check } from "lucide-react";
+import { Settings, X, RotateCcw, Edit2, Check, Gauge, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -96,6 +96,8 @@ export function SettingsPanel() {
     const updateSettings = useGameStore(state => state.updateSettings);
     const updatePlayerName = useGameStore(state => state.updatePlayerName);
     const resetGame = useGameStore(state => state.resetGame);
+    const preferredInputMode = useGameStore(state => state.preferredInputMode);
+    const setPreferredInputMode = useGameStore(state => state.setPreferredInputMode);
 
     const { scoringConfig, playerNames } = settings;
 
@@ -256,6 +258,45 @@ export function SettingsPanel() {
                                     >
                                         <div className="font-bold">半銃制</div>
                                         <div className="text-xs opacity-70">閒家都畀</div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Input Mode */}
+                            <div className="mb-8">
+                                <h3 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wider">
+                                    計番模式
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => setPreferredInputMode('pro')}
+                                        className={cn(
+                                            "p-4 rounded-xl text-center transition-all",
+                                            preferredInputMode === 'pro'
+                                                ? "bg-secondary text-secondary-foreground"
+                                                : "glass-card hover:ring-2 hover:ring-secondary/50"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                            <Gauge size={18} />
+                                            <span className="font-bold">入分模式</span>
+                                        </div>
+                                        <div className="text-xs opacity-70">直接輸入番數</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setPreferredInputMode('normal')}
+                                        className={cn(
+                                            "p-4 rounded-xl text-center transition-all",
+                                            preferredInputMode === 'normal'
+                                                ? "bg-secondary text-secondary-foreground"
+                                                : "glass-card hover:ring-2 hover:ring-secondary/50"
+                                        )}
+                                    >
+                                        <div className="flex items-center justify-center gap-2 mb-1">
+                                            <List size={18} />
+                                            <span className="font-bold">計番模式</span>
+                                        </div>
+                                        <div className="text-xs opacity-70">揀牌型計番</div>
                                     </button>
                                 </div>
                             </div>
