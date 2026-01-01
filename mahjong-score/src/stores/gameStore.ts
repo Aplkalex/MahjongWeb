@@ -251,6 +251,7 @@ export const useGameStore = create<GameStore>()(
                     roundNumber: game.roundNumber,
                     roundWind: game.roundWind,
                     dealerSeatIndex: game.dealerSeatIndex,
+                    description,
                     outcome: {
                         type: 'win',
                         result,

@@ -259,6 +259,8 @@ export interface Round {
     roundWind: Wind;
     /** 莊家座位 */
     dealerSeatIndex: SeatIndex;
+    /** 額外描述（例如：自摸 5番、牌型摘要等） */
+    description?: string;
     /** 結果 */
     outcome: RoundOutcome;
     /** 時間戳 */

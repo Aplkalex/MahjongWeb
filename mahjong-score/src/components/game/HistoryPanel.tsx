@@ -2,9 +2,10 @@
 
 import { useGameStore } from "@/stores/gameStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Trophy, MinusCircle, Undo2 } from "lucide-react";
+import { X, Trophy, MinusCircle, Undo2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Round } from "@/lib/engine/types";
+import { Player, Round } from "@/lib/engine/types";
+import { useMemo, useState } from "react";
 
 interface HistoryPanelProps {
     isOpen: boolean;
@@ -26,14 +27,25 @@ function formatTime(timestamp: number): string {
     });
 }
 
-function RoundItem({ round, players, onUndo, isLast }: { 
+function RoundItem({ round, players, onUndo, isLast, isExpanded, onToggle }: { 
     round: Round; 
-    players: { id: string; name: string }[];
+    players: Player[];
     onUndo?: () => void;
     isLast: boolean;
+    isExpanded: boolean;
+    onToggle: () => void;
 }) {
     const getPlayerName = (playerId: string) => {
         return players.find(p => p.id === playerId)?.name || '???';
+    };
+
+    const dealerName = players[round.dealerSeatIndex]?.name || '???';
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+        }
     };
 
     if (round.outcome.type === 'draw') {
@@ -41,30 +53,69 @@ function RoundItem({ round, players, onUndo, isLast }: {
             <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="glass-card p-4 flex items-center gap-4"
+                className="glass-card p-4"
+                role="button"
+                tabIndex={0}
+                onClick={onToggle}
+                onKeyDown={handleKeyDown}
             >
-                <div className="w-10 h-10 rounded-full bg-muted/30 flex items-center justify-center">
-                    <MinusCircle size={20} className="text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold">{WIND_LABELS[round.roundWind]}{round.roundNumber}</span>
-                        <span className="text-muted-foreground">流局</span>
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-muted/30 flex items-center justify-center">
+                        <MinusCircle size={20} className="text-muted-foreground" />
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                        {formatTime(round.timestamp)}
+                    <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">{WIND_LABELS[round.roundWind]}{round.roundNumber}</span>
+                            <span className="text-muted-foreground">流局</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                            {formatTime(round.timestamp)}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        {isLast && onUndo && (
+                            <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onUndo();
+                                }}
+                                className="p-2 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label="撤銷上一局"
+                            >
+                                <Undo2 size={18} />
+                            </motion.button>
+                        )}
+                        <ChevronDown
+                            size={18}
+                            className={cn(
+                                "text-muted-foreground transition-transform",
+                                isExpanded && "rotate-180"
+                            )}
+                        />
                     </div>
                 </div>
-                {isLast && onUndo && (
-                    <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={onUndo}
-                        className="p-2 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                        <Undo2 size={18} />
-                    </motion.button>
-                )}
+
+                <AnimatePresence>
+                    {isExpanded && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-3 pt-3 border-t border-white/10 text-sm text-muted-foreground"
+                        >
+                            <div className="flex items-center justify-between">
+                                <span>莊家</span>
+                                <span className="font-medium text-foreground">{dealerName}</span>
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                                <span>備註</span>
+                                <span>本局沒有計分</span>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </motion.div>
         );
     }
@@ -78,6 +129,10 @@ function RoundItem({ round, players, onUndo, isLast }: {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             className="glass-card p-4"
+            role="button"
+            tabIndex={0}
+            onClick={onToggle}
+            onKeyDown={handleKeyDown}
         >
             <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
@@ -96,16 +151,29 @@ function RoundItem({ round, players, onUndo, isLast }: {
                         )}
                     </div>
                 </div>
-                {isLast && onUndo && (
-                    <motion.button
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={onUndo}
-                        className="p-2 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                        <Undo2 size={18} />
-                    </motion.button>
-                )}
+                <div className="flex items-center gap-1">
+                    {isLast && onUndo && (
+                        <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onUndo();
+                            }}
+                            className="p-2 rounded-lg hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label="撤銷上一局"
+                        >
+                            <Undo2 size={18} />
+                        </motion.button>
+                    )}
+                    <ChevronDown
+                        size={18}
+                        className={cn(
+                            "text-muted-foreground transition-transform",
+                            isExpanded && "rotate-180"
+                        )}
+                    />
+                </div>
             </div>
 
             {/* Score changes */}
@@ -122,6 +190,77 @@ function RoundItem({ round, players, onUndo, isLast }: {
                     </div>
                 ))}
             </div>
+
+            <AnimatePresence>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="mt-3 pt-3 border-t border-white/10"
+                    >
+                        <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center justify-between">
+                                <span>時間</span>
+                                <span>{formatTime(round.timestamp)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>莊家</span>
+                                <span className="text-foreground font-medium">{dealerName}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>底分</span>
+                                <span className="font-mono text-foreground">{result.basePoints}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span>莊家食糊</span>
+                                <span className={cn(
+                                    "font-medium",
+                                    result.isDealerWin ? "text-primary" : "text-muted-foreground"
+                                )}>
+                                    {result.isDealerWin ? '是' : '否'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {(round.description || result.fanDescription) && (
+                            <div className="mt-3 text-xs">
+                                <div className="text-muted-foreground mb-1">描述</div>
+                                <div className="text-foreground">
+                                    {round.description || result.fanDescription}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-3">
+                            <div className="text-xs text-muted-foreground mb-2">分數明細</div>
+                            <div className="space-y-2">
+                                {result.changes.map((change) => {
+                                    const oldScore = change.newScore - change.delta;
+                                    return (
+                                        <div key={change.playerId} className="flex items-center justify-between text-xs">
+                                            <div className="text-muted-foreground truncate max-w-[120px]">
+                                                {getPlayerName(change.playerId)}
+                                            </div>
+                                            <div className="flex items-center gap-2 font-mono">
+                                                <span className="text-muted-foreground">{oldScore}</span>
+                                                <span className="text-muted-foreground">→</span>
+                                                <span className="text-foreground font-bold">{change.newScore}</span>
+                                                <span className={cn(
+                                                    "font-bold",
+                                                    change.delta > 0 ? "text-green-400" : change.delta < 0 ? "text-red-400" : "text-muted-foreground"
+                                                )}>
+                                                    ({change.delta > 0 ? '+' : ''}{change.delta})
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 }
@@ -130,10 +269,12 @@ export function HistoryPanel({ isOpen, onClose }: HistoryPanelProps) {
     const game = useGameStore(state => state.game);
     const undoLastRound = useGameStore(state => state.undoLastRound);
 
+    const [expandedRoundId, setExpandedRoundId] = useState<string | null>(null);
+
     if (!game) return null;
 
     const { history, players } = game;
-    const reversedHistory = [...history].reverse();
+    const reversedHistory = useMemo(() => [...history].reverse(), [history]);
 
     const handleUndo = () => {
         if (confirm("確定要撤銷上一局嗎？")) {
@@ -204,6 +345,12 @@ export function HistoryPanel({ isOpen, onClose }: HistoryPanelProps) {
                                         players={players}
                                         onUndo={index === 0 ? handleUndo : undefined}
                                         isLast={index === 0}
+                                        isExpanded={expandedRoundId === round.id}
+                                        onToggle={() =>
+                                            setExpandedRoundId((current) =>
+                                                current === round.id ? null : round.id
+                                            )
+                                        }
                                     />
                                 ))
                             )}
