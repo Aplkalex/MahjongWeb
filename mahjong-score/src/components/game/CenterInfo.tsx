@@ -10,6 +10,8 @@ interface CenterInfoProps {
     dealerCount: number;
     onWin: () => void;
     onDraw: () => void;
+    onNextRound?: () => void;
+    onAdvanceDealer?: () => void;
     onUndo?: () => void;
     onHistory?: () => void;
     onDice?: () => void;
@@ -30,6 +32,8 @@ export function CenterInfo({
     dealerCount, 
     onWin, 
     onDraw,
+    onNextRound,
+    onAdvanceDealer,
     onUndo,
     onHistory,
     onDice,
@@ -95,6 +99,26 @@ export function CenterInfo({
 
             {/* Secondary Actions */}
             <div className="flex items-center gap-2">
+                {onNextRound && (
+                    <MotionButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={onNextRound}
+                        className="gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                        下一局
+                    </MotionButton>
+                )}
+                {onAdvanceDealer && (
+                    <MotionButton
+                        variant="ghost"
+                        size="sm"
+                        onClick={onAdvanceDealer}
+                        className="gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                        換莊
+                    </MotionButton>
+                )}
                 <AnimatePresence>
                     {canUndo && onUndo && (
                         <motion.div

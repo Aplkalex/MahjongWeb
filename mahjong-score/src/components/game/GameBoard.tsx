@@ -19,7 +19,9 @@ export function GameBoard() {
     const startWinFlow = useGameStore((state) => state.startWinFlow);
     const preferredInputMode = useGameStore((state) => state.preferredInputMode);
     const recordDraw = useGameStore((state) => state.recordDraw);
+    const nextRound = useGameStore((state) => state.nextRound);
     const undoLastRound = useGameStore((state) => state.undoLastRound);
+    const advanceDealer = useGameStore((state) => state.advanceDealer);
 
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const [isSetupOpen, setIsSetupOpen] = useState(false);
@@ -75,6 +77,18 @@ export function GameBoard() {
         }
     };
 
+    const handleNextRound = () => {
+        if (confirm("確定直接開始下一局？（唔計分、唔換莊）")) {
+            nextRound();
+        }
+    };
+
+    const handleAdvanceDealer = () => {
+        if (confirm("確定要換莊？")) {
+            advanceDealer();
+        }
+    };
+
     const handleUndo = () => {
         if (confirm("確定要撤銷上一局嗎？")) {
             undoLastRound();
@@ -127,6 +141,8 @@ export function GameBoard() {
                             dealerCount={dealerContinueCount}
                             onWin={() => startWinFlow(preferredInputMode)}
                             onDraw={handleDraw}
+                            onNextRound={handleNextRound}
+                            onAdvanceDealer={handleAdvanceDealer}
                             onUndo={handleUndo}
                             onHistory={() => setIsHistoryOpen(true)}
                             canUndo={canUndo}

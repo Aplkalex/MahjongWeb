@@ -88,6 +88,9 @@ interface GameStore {
     /** 記錄流局 */
     recordDraw: () => void;
 
+    /** 下一局（唔計分，唔換莊） */
+    nextRound: () => void;
+
     /** Undo 上一局 */
     undoLastRound: () => void;
 
@@ -324,6 +327,20 @@ export const useGameStore = create<GameStore>()(
                         roundNumber: game.roundNumber + 1,
                         dealerContinueCount: 0,
                         history: [...game.history, round],
+                        updatedAt: Date.now(),
+                    },
+                });
+            },
+
+            nextRound: () => {
+                const { game } = get();
+                if (!game) return;
+
+                set({
+                    game: {
+                        ...game,
+                        roundNumber: game.roundNumber + 1,
+                        dealerContinueCount: 0,
                         updatedAt: Date.now(),
                     },
                 });

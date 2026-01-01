@@ -168,6 +168,19 @@ describe('回合管理', () => {
         expect(state.game?.history[0].outcome.type).toBe('draw');
     });
 
+    it('下一局 - 應該加局數但唔換莊', () => {
+        const before = useGameStore.getState().game!;
+
+        useGameStore.getState().nextRound();
+
+        const after = useGameStore.getState().game!;
+        expect(after.roundNumber).toBe(before.roundNumber + 1);
+        expect(after.dealerSeatIndex).toBe(before.dealerSeatIndex);
+        expect(after.roundWind).toBe(before.roundWind);
+        expect(after.dealerContinueCount).toBe(0);
+        expect(after.history.length).toBe(before.history.length);
+    });
+
     it('Undo 應該還原狀態', () => {
         const game = useGameStore.getState().game!;
         const originalScore = game.players[0].score;
